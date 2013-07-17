@@ -153,6 +153,12 @@ class ServiceVMManager:
                     # Create T1 port for this router
                     p_spec['port']['name'] = constants.T1_PORT_NAME + indx
                     p_spec['port']['network_id'] = t1_n[i]['id']
+                    p_spec['port']['fixed_ips'] = [
+                        {
+                            "subnet_id": "3d930609-96a5-42a2-a693-339383edb7ff",
+                            "ip_address": "172.16.1.10"
+                        }
+                    ]
                     t1_p.append(self._core_plugin.create_port(self._context,
                                                               p_spec))
                     # Create trunk network for this router
