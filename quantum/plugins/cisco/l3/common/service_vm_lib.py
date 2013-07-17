@@ -27,6 +27,8 @@ from quantum.openstack.common import uuidutils
 from quantum.openstack.common import log as logging
 from quantum.plugins.cisco.l3.common import constants
 
+import pdb
+
 LOG = logging.getLogger(__name__)
 
 
@@ -156,9 +158,11 @@ class ServiceVMManager:
                                            'admin_state_up': True,
                                            'name': constants.T1_SUBNET_NAME,
                                            'network_id': t1_n[i]['id'],
-                                           'cidr': constants.T1_SUBNET_START_PREFX+indx+'.0/24'
+                                           'cidr': constants.SUB_PREFX,
+                                           'enable_dhcp': False
                                            }
                                 }
+                    pdb.set_trace()
                     sub_t1.append(self._core_plugin.create_subnet(self._context,
                                                                   sub_spec))
                     # Create T1 port for this router
@@ -171,14 +175,26 @@ class ServiceVMManager:
                     ]
                     t1_p.append(self._core_plugin.create_port(self._context,
                                                               p_spec))
-                    # Create trunk network for this router
+                    # Create T2 trunk network for this router
                     n_spec['network']['name'] = (constants.T2_NETWORK_NAME +
                                                  indx)
                     t2_n.append(self._core_plugin.create_network(self._context,
                                                                  n_spec))
+                    # Create subnet on this trunk
+                    sub_spec['subnet']['name'] = constants.T2_SUBNET_NAME
+                    sub_spec['subnet']['network_id'] = t2_n[i]['id']
+                    pdb.set_trace()
+                    sub_t2.append(self._core_plugin.create_subnet(self._context,
+                                                                  sub_spec))
+
                     # Create T2 port for this router
                     p_spec['port']['name'] = constants.T2_PORT_NAME + indx
                     p_spec['port']['network_id'] = t2_n[i]['id']
+                    p_spec['port']['fixed_ips'] = [
+                        {
+                            "subnet_id": sub_t2[i]['id'],
+                        }
+                    ]
                     t2_p.append(self._core_plugin.create_port(self._context,
                                                               p_spec))
             except q_exc.QuantumException:
