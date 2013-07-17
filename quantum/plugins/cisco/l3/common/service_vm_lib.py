@@ -59,7 +59,8 @@ class ServiceVMManager:
                 n_exc.ConnectionRefused, n_exc.ClientException) as e:
             LOG.error(_('Failed to create service VM instance: %s'), e)
             return None
-        return server.id
+        res = {'id': server.id}
+        return res
 
     def delete_service_vm(self, id, mgmt_nw_id, delete_networks=False):
         nets_to_delete = []
