@@ -20,6 +20,12 @@ T1_PORT_NAME = 't1:'
 T2_PORT_NAME = 't2:'
 T1_NETWORK_NAME = 't1_n:'
 T2_NETWORK_NAME = 't2_n:'
+T1_SUBNET_NAME = 't1_subnet:'
+T1_SUBNET_NAME = 't2_subnet:'
+
+T1_SUBNET_START_PREFX = '172.16.'
+T2_SUBNET_START_PREFX = '172.32.'
+
 
 # Hosting entities are of one of the following types.
 NETWORK_NODE_HOST = 'NetworkNamespaceNode'

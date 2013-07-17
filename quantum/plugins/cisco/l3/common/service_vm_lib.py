@@ -120,6 +120,7 @@ class ServiceVMManager:
                                     tenant_id, max_hosted):
         mgmt_port = None
         t1_n, t1_p, t2_n, t2_p = [], [], [], []
+        sub_t1, sub_t2 = [], []
         LOG.debug(_('******Mgmt_sec_group_id is %s *****'), csr_mgmt_sec_grp_id)
         if mgmt_nw_id is not None and tenant_id is not None:
             # Create port for mgmt interface
@@ -150,13 +151,22 @@ class ServiceVMManager:
                                                  indx)
                     t1_n.append(self._core_plugin.create_network(
                         self._context, n_spec))
+                    #Create a subnet on this network
+                    sub_spec = {'subnet': {'tenant_id': tenant_id,
+                                           'admin_state_up': True,
+                                           'name': constants.T1_SUBNET_NAME,
+                                           'network_id': t1_n[i]['id'],
+                                           'cidr': constants.T1_SUBNET_START_PREFX+indx+'.0/24'
+                                           }
+                                }
+                    sub_t1.append(self._core_plugin.create_subnet(self._context,
+                                                                  sub_spec))
                     # Create T1 port for this router
                     p_spec['port']['name'] = constants.T1_PORT_NAME + indx
                     p_spec['port']['network_id'] = t1_n[i]['id']
                     p_spec['port']['fixed_ips'] = [
                         {
-                            "subnet_id": "3d930609-96a5-42a2-a693-339383edb7ff",
-                            "ip_address": "172.16.1.10"
+                            "subnet_id": sub_t1[i]['id'],
                         }
                     ]
                     t1_p.append(self._core_plugin.create_port(self._context,
