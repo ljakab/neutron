@@ -161,7 +161,8 @@ class ServiceVMManager:
                                            'cidr': constants.SUB_PREFX,
                                            'enable_dhcp': False,
                                            'gateway_ip': attributes.ATTR_NOT_SPECIFIED,
-                                           'allocation_pools': attributes.ATTR_NOT_SPECIFIED,                                           
+                                           'allocation_pools': attributes.ATTR_NOT_SPECIFIED,
+                                           'ip_version': 4
                                            }
                                 }
                     pdb.set_trace()
