@@ -108,7 +108,9 @@ class CiscoCSRDriver():
             return False
 
     def _enable_intfs(self, conn):
-        interfaces = ['GigabitEthernet 1', 'GigabitEthernet 2']
+        interfaces = ['GigabitEthernet 1', 'GigabitEthernet 2',
+                      'GigabitEthernet 3', 'GigabitEthernet 4',
+                      'GigabitEthernet 5', 'GigabitEthernet 6']
         try:
             for i in interfaces:
                 confstr = snippets.ENABLE_INTF % i
