@@ -162,7 +162,8 @@ class ServiceVMManager:
                                            'enable_dhcp': False,
                                            'gateway_ip': attributes.ATTR_NOT_SPECIFIED,
                                            'allocation_pools': attributes.ATTR_NOT_SPECIFIED,
-                                           'ip_version': 4
+                                           'ip_version': 4,
+                                           'dns_nameservers' : attributes.ATTR_NOT_SPECIFIED
                                            }
                                 }
                     pdb.set_trace()
