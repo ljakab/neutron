@@ -74,6 +74,16 @@ SET_INTC = """
 </config>
 """
 
+ENABLE_INTF = """
+<config>
+        <cli-config-data>
+            <cmd>interface %s</cmd>
+            <cmd>no shutdown</cmd>
+        </cli-config-data>
+</config>
+"""
+
+
 CREATE_VRF = """
 <config>
         <cli-config-data>

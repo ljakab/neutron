@@ -18,12 +18,12 @@
 
 import logging
 import re
+import time
 
 from ncclient import manager
 from ncclient import xml_
 import xml.etree.ElementTree as ET
 from ciscoconfparse import CiscoConfParse
-
 
 import cisco_csr_snippets as snippets
 
@@ -43,6 +43,7 @@ class CiscoCSRDriver():
         self._csr_password = csr_password
         self._csr_conn = None
         self._allow_agent = False
+        self._intfs_enabled = False
 
     def _get_connection(self):
         """Make SSH connection to the CSR """
@@ -56,6 +57,8 @@ class CiscoCSRDriver():
                                                  password=self._csr_password,
                                                  allow_agent=self._allow_agent)
                 #self._csr_conn.async_mode = True
+                if not self._intfs_enabled:
+                    self._intfs_enabled = self._enable_intfs(self._csr_conn)
             return self._csr_conn
         except Exception:
             LOG.exception("Failed getting connecting to CSR1000v. "
@@ -68,7 +71,8 @@ class CiscoCSRDriver():
         ioscfg = self.get_running_config()
         parse = CiscoConfParse(ioscfg)
         intfs_raw = parse.find_lines("^interface GigabitEthernet")
-        #['interface GigabitEthernet1', 'interface GigabitEthernet2', 'interface GigabitEthernet0']
+        #['interface GigabitEthernet1', 'interface GigabitEthernet2',
+        #  'interface GigabitEthernet0']
         intfs = []
         for line in intfs_raw:
             intf = line.strip().split(' ')[1]
@@ -97,11 +101,24 @@ class CiscoCSRDriver():
     def interface_exists(self, interface):
         ioscfg = self.get_running_config()
         parse = CiscoConfParse(ioscfg)
-        intfs_raw = parse.find_lines("^interface "+interface)
+        intfs_raw = parse.find_lines("^interface " + interface)
         if len(intfs_raw) > 0:
             return True
         else:
             return False
+
+    def _enable_intfs(self, conn):
+        interfaces = ['GigabitEthernet 1', 'GigabitEthernet 2']
+        try:
+            for i in interfaces:
+                confstr = snippets.ENABLE_INTF % i
+                rpc_obj = conn.edit_config(target='running', config=confstr)
+                if self._check_response(rpc_obj, 'ENABLE_INTF'):
+                    LOG.info("Enabled interface %s " % i)
+                    time.sleep(1)
+        except Exception:
+            return False
+        return True
 
     def get_vrfs(self):
         """
@@ -112,7 +129,8 @@ class CiscoCSRDriver():
         parse = CiscoConfParse(ioscfg)
         vrfs_raw = parse.find_lines("^ip vrf")
         for line in vrfs_raw:
-            vrf_name = line.strip().split(' ')[2]  #   ['ip vrf <vrf-name>',....]
+            #  raw format ['ip vrf <vrf-name>',....]
+            vrf_name = line.strip().split(' ')[2]
             vrfs.append(vrf_name)
         LOG.info("VRFs:%s" % vrfs)
         return vrfs
@@ -137,8 +155,8 @@ class CiscoCSRDriver():
             return ioscfg
 
     def _check_acl(self, acl_no, network, netmask):
-        exp_cfg_lines = ['ip access-list standard '+str(acl_no),
-                         ' permit '+str(network)+' '+str(netmask)]
+        exp_cfg_lines = ['ip access-list standard ' + str(acl_no),
+                         ' permit ' + str(network) + ' ' + str(netmask)]
         ioscfg = self.get_running_config()
         parse = CiscoConfParse(ioscfg)
         acls_raw = parse.find_children(exp_cfg_lines[0])
@@ -155,12 +173,11 @@ class CiscoCSRDriver():
     def cfg_exists(self, cfg_str):
         ioscfg = self.get_running_config()
         parse = CiscoConfParse(ioscfg)
-        cfg_raw = parse.find_lines("^"+cfg_str)
+        cfg_raw = parse.find_lines("^" + cfg_str)
         if len(cfg_raw) > 0:
             return True
         else:
             return False
-
 
     def set_interface(self, name, ip_address, mask):
         conn = self._get_connection()
@@ -200,14 +217,14 @@ class CiscoCSRDriver():
     def remove_subinterface(self, subinterface, vlan_id, vrf_name, ip):
         conn = self._get_connection()
         if self.interface_exists(subinterface):
-            confstr = snippets.REMOVE_SUBINTERFACE % ( subinterface )
+            confstr = snippets.REMOVE_SUBINTERFACE % (subinterface)
             rpc_obj = conn.edit_config(target='running', config=confstr)
             print self._check_response(rpc_obj, 'REMOVE_SUBINTERFACE')
 
     def _get_interface_cfg(self, interface):
         ioscfg = self.get_running_config()
         parse = CiscoConfParse(ioscfg)
-        res = parse.find_children('interface '+interface)
+        res = parse.find_children('interface ' + interface)
         return res
 
     def nat_rules_for_internet_access(self, acl_no, network,
@@ -227,7 +244,8 @@ class CiscoCSRDriver():
                 rpc_obj = conn.edit_config(target='running', config=confstr)
                 print self._check_response(rpc_obj, 'CREATE_ACL')
 
-            confstr = snippets.SET_DYN_SRC_TRL_INTFC % (acl_no, outer_intfc, vrf_name)
+            confstr = snippets.SET_DYN_SRC_TRL_INTFC % (acl_no, outer_intfc,
+                                                        vrf_name)
             rpc_obj = conn.edit_config(target='running', config=confstr)
             print self._check_response(rpc_obj, 'CREATE_SNAT')
 
@@ -253,7 +271,9 @@ class CiscoCSRDriver():
         with conn.locked(target='running'):
             confstr = snippets.SNAT_CFG % (acl_no, outer_intfc, vrf_name)
             if self.cfg_exists(confstr):
-                confstr = snippets.REMOVE_DYN_SRC_TRL_INTFC % (acl_no, outer_intfc, vrf_name)
+                confstr = snippets.REMOVE_DYN_SRC_TRL_INTFC % (acl_no,
+                                                               outer_intfc,
+                                                               vrf_name)
                 rpc_obj = conn.edit_config(target='running', config=confstr)
                 print self._check_response(rpc_obj, 'REMOVE_DYN_SRC_TRL_INTFC')
 
@@ -339,7 +359,7 @@ class CiscoCSRDriver():
             Response in case of error looks like this.
             We take the error type and tag.
             '<?xml version="1.0" encoding="UTF-8"?>
-            <rpc-reply message-id="urn:uuid:81bf8082-ccf1-11e2-b69a-000c29e1b85c"
+            <rpc-reply message-id="urn:uuid:81bf8082-....-b69a-000c29e1b85c"
             xmlns="urn:ietf:params:netconf:base:1.0">
                 <rpc-error>
                     <error-type>protocol</error-type>
@@ -353,6 +373,7 @@ class CiscoCSRDriver():
             logging.error(error_str, snippet_name, rpc_obj._root[0][0].text,
                           rpc_obj._root[0][1].text)
             raise Exception("Error!")
+            return False
 
 
 ##################
@@ -364,13 +385,12 @@ if __name__ == "__main__":
     driver = CiscoCSRDriver("localhost", 8000, "lab", 'lab')
     if driver._get_connection():
         logging.info('Connection Established!')
-        driver.get_capabilities()
+        #driver.get_capabilities()
         #print driver.get_running_config()
         #driver.set_interface(conn, 'GigabitEthernet1', '10.0.200.1')
         #driver.get_interfaces(conn)
         #driver.get_interface_ip(conn, 'GigabitEthernet1')
-        #driver.create_vrf('qrouter-dummy')
-
+        driver.create_vrf('nrouter-dummy')
         #driver.create_router(1, 'qrouter-dummy2', '10.0.110.1', 11)
         #driver.create_subinterface('GigabitEthernet1.11', 'qrouter-131666dc', '10.0.11.1', '11', '255.255.255.0')
         #driver.remove_subinterface('GigabitEthernet1.11', 'qrouter-131666dc', '10.0.11.1', '11', '255.255.255.0')
@@ -397,6 +417,6 @@ if __name__ == "__main__":
         #driver.remove_subinterface('GigabitEthernet2.101', '101', 'qrouter-131666dc', '10.0.11.1')
         #print driver.if_interface_exists('GigabitEthernet2.10')
         #print driver.if_interface_exists('GigabitEthernet1.10')
-        print driver.cfg_exists("ip nat inside source list acl_12 interface GigabitEthernet2.100 vrf nrouter-93bff2 overload")
-        print driver.cfg_exists("ip nat inside source list acl_121 interface GigabitEthernet2.100 vrf nrouter-93bff2 overload")
+        # print driver.cfg_exists("ip nat inside source list acl_12 interface GigabitEthernet2.100 vrf nrouter-93bff2 overload")
+        # print driver.cfg_exists("ip nat inside source list acl_121 interface GigabitEthernet2.100 vrf nrouter-93bff2 overload")
         print "All done"
