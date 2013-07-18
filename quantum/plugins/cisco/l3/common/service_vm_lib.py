@@ -156,10 +156,12 @@ class ServiceVMManager:
                     #Create a subnet on this network
                     sub_spec = {'subnet': {'tenant_id': tenant_id,
                                            'admin_state_up': True,
-                                           'name': constants.T1_SUBNET_NAME,
+                                           'name': constants.T1_SUBNET_NAME + indx,
                                            'network_id': t1_n[i]['id'],
                                            'cidr': constants.SUB_PREFX,
-                                           'enable_dhcp': False
+                                           'enable_dhcp': False,
+                                           'gateway_ip': attributes.ATTR_NOT_SPECIFIED,
+                                           'allocation_pools': attributes.ATTR_NOT_SPECIFIED,                                           
                                            }
                                 }
                     pdb.set_trace()
@@ -181,7 +183,7 @@ class ServiceVMManager:
                     t2_n.append(self._core_plugin.create_network(self._context,
                                                                  n_spec))
                     # Create subnet on this trunk
-                    sub_spec['subnet']['name'] = constants.T2_SUBNET_NAME
+                    sub_spec['subnet']['name'] = constants.T2_SUBNET_NAME + indx
                     sub_spec['subnet']['network_id'] = t2_n[i]['id']
                     pdb.set_trace()
                     sub_t2.append(self._core_plugin.create_subnet(self._context,
