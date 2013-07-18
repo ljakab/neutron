@@ -467,12 +467,12 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
             # These resources are owned by the L3AdminTenant
             birth_date = timeutils.utcnow()
             for i in xrange(0, num):
-                mgmt_port, t1_n, t1_p, t2_n, t2_p = (
-                     svm.create_service_vm_resources(
-                         self.mgmt_nw_id(),
-                         self.csr_mgmt_sec_grp_id(),
-                         self.l3_tenant_id(),
-                         cfg.CONF.max_routers_per_csr1kv))
+                mgmt_port, t1_n, t1_sub, t1_p, t2_n, t2_sub, t2_p = (
+                    svm.create_service_vm_resources(
+                        self.mgmt_nw_id(),
+                        self.csr_mgmt_sec_grp_id(),
+                        self.l3_tenant_id(),
+                        cfg.CONF.max_routers_per_csr1kv))
                 if mgmt_port is None:
                      # Required ports could not be created
                      return hosting_entities
@@ -499,8 +499,8 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
                 else:
                     # Fundamental error like could not contact Nova
                     # Cleanup anything we created
-                    svm.cleanup_for_service_vm(mgmt_port, t1_n, t2_n,
-                                               t1_p, t2_p)
+                    svm.cleanup_for_service_vm(mgmt_port, t1_n, t1_sub, t1_p,
+                                               t2_n, t2_sub, t2_p)
                     return hosting_entities
         return hosting_entities
 

@@ -94,7 +94,8 @@ class ServiceVMManager:
                                                             'err': e})
         return result
 
-    def cleanup_for_service_vm(self, mgmt_port, t1_n, t2_n, t1_p, t2_p):
+    def cleanup_for_service_vm(self, mgmt_port, t1_n, t1_sub, t1_p,
+                               t2_n, t2_sub, t2_p):
          # Remove anything created.
         if mgmt_port is not None:
             try:
@@ -110,6 +111,13 @@ class ServiceVMManager:
                 LOG.error(_('Failed to delete trunk port %(port_id)s for '
                             'service vm due to %(err)s'),
                           {'port_id': item['id'], 'err': e})
+        for item in t1_sub + t2_sub:
+            try:
+                self._core_plugin.delete_subnet(self._context, item['id'])
+            except q_exc.QuantumException as e:
+                LOG.error(_('Failed to delete subnet %(subnet_id)s for '
+                            'service vm due to %(err)s'),
+                          {'subnet_id': item['id'], 'err': e})
         for item in t1_n + t2_n:
             try:
                 self._core_plugin.delete_network(self._context, item['id'])
@@ -122,8 +130,7 @@ class ServiceVMManager:
                                     tenant_id, max_hosted):
         mgmt_port = None
         t1_n, t1_p, t2_n, t2_p = [], [], [], []
-        sub_t1, sub_t2 = [], []
-        LOG.debug(_('******Mgmt_sec_group_id is %s *****'), csr_mgmt_sec_grp_id)
+        t1_sub, t2_sub = [], []
         if mgmt_nw_id is not None and tenant_id is not None:
             # Create port for mgmt interface
             p_spec = {'port': {'tenant_id': tenant_id,
@@ -168,14 +175,14 @@ class ServiceVMManager:
                                            }
                                 }
                     pdb.set_trace()
-                    sub_t1.append(self._core_plugin.create_subnet(self._context,
+                    t1_sub.append(self._core_plugin.create_subnet(self._context,
                                                                   sub_spec))
                     # Create T1 port for this router
                     p_spec['port']['name'] = constants.T1_PORT_NAME + indx
                     p_spec['port']['network_id'] = t1_n[i]['id']
                     p_spec['port']['fixed_ips'] = [
                         {
-                            "subnet_id": sub_t1[i]['id'],
+                            "subnet_id": t1_sub[i]['id'],
                         }
                     ]
                     t1_p.append(self._core_plugin.create_port(self._context,
@@ -189,7 +196,7 @@ class ServiceVMManager:
                     sub_spec['subnet']['name'] = constants.T2_SUBNET_NAME + indx
                     sub_spec['subnet']['network_id'] = t2_n[i]['id']
                     pdb.set_trace()
-                    sub_t2.append(self._core_plugin.create_subnet(self._context,
+                    t2_sub.append(self._core_plugin.create_subnet(self._context,
                                                                   sub_spec))
 
                     # Create T2 port for this router
@@ -197,7 +204,7 @@ class ServiceVMManager:
                     p_spec['port']['network_id'] = t2_n[i]['id']
                     p_spec['port']['fixed_ips'] = [
                         {
-                            "subnet_id": sub_t2[i]['id'],
+                            "subnet_id": t2_sub[i]['id'],
                         }
                     ]
                     t2_p.append(self._core_plugin.create_port(self._context,
@@ -206,7 +213,7 @@ class ServiceVMManager:
                 self.cleanup_for_service_vm(mgmt_port, t1_n, t2_n, t1_p, t2_p)
                 mgmt_port = None
                 t1_n, t1_p, t2_n, t2_p = [], [], [], []
-        return (mgmt_port, t1_n, t1_p, t2_n, t2_p)
+        return (mgmt_port, t1_n, t1_sub, t1_p, t2_n, t2_sub, t2_p)
 
     # TODO(bob-melander): Move this to fake_service_vm_lib.py file
     # with FakeServiceVMManager
