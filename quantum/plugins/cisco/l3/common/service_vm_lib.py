@@ -163,7 +163,8 @@ class ServiceVMManager:
                                            'gateway_ip': attributes.ATTR_NOT_SPECIFIED,
                                            'allocation_pools': attributes.ATTR_NOT_SPECIFIED,
                                            'ip_version': 4,
-                                           'dns_nameservers' : attributes.ATTR_NOT_SPECIFIED
+                                           'dns_nameservers': attributes.ATTR_NOT_SPECIFIED,
+                                           'host_routes': attributes.ATTR_NOT_SPECIFIED
                                            }
                                 }
                     pdb.set_trace()
