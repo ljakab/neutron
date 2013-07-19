@@ -160,6 +160,10 @@ class ServiceVMManager:
                                                  indx)
                     t1_n.append(self._core_plugin.create_network(
                         self._context, n_spec))
+                    LOG.debug(_('Created T1 network with name %(name)s and '
+                                'id %(id)s'),
+                              {'name': constants.T1_NETWORK_NAME + indx,
+                               'id': t1_n[i]['id']})
                     #Create a subnet on this network
                     sub_spec = {'subnet': {'tenant_id': tenant_id,
                                            'admin_state_up': True,
@@ -174,7 +178,7 @@ class ServiceVMManager:
                                            'host_routes': attributes.ATTR_NOT_SPECIFIED
                                            }
                                 }
-                    pdb.set_trace()
+                    #pdb.set_trace()
                     t1_sub.append(self._core_plugin.create_subnet(self._context,
                                                                   sub_spec))
                     # Create T1 port for this router
@@ -187,15 +191,24 @@ class ServiceVMManager:
                     ]
                     t1_p.append(self._core_plugin.create_port(self._context,
                                                               p_spec))
+                    LOG.debug(_('Created T1 port with name %(name)s,  '
+                                'id %(id)s and subnet %(subnet)s'),
+                              {'name': t1_n[i]['name'],
+                               'id': t1_n[i]['id'],
+                               'subnet': t1_sub[i]['id']})
                     # Create T2 trunk network for this router
                     n_spec['network']['name'] = (constants.T2_NETWORK_NAME +
                                                  indx)
                     t2_n.append(self._core_plugin.create_network(self._context,
                                                                  n_spec))
+                    LOG.debug(_('Created T2 network with name %(name)s and '
+                                'id %(id)s'),
+                              {'name': constants.T2_NETWORK_NAME + indx,
+                               'id': t2_n[i]['id']})
                     # Create subnet on this trunk
                     sub_spec['subnet']['name'] = constants.T2_SUBNET_NAME + indx
                     sub_spec['subnet']['network_id'] = t2_n[i]['id']
-                    pdb.set_trace()
+                    #pdb.set_trace()
                     t2_sub.append(self._core_plugin.create_subnet(self._context,
                                                                   sub_spec))
 
@@ -209,6 +222,11 @@ class ServiceVMManager:
                     ]
                     t2_p.append(self._core_plugin.create_port(self._context,
                                                               p_spec))
+                    LOG.debug(_('Created T2 port with name %(name)s,  '
+                                'id %(id)s and subnet %(subnet)s'),
+                              {'name': t2_n[i]['name'],
+                               'id': t2_n[i]['id'],
+                               'subnet': t2_sub[i]['id']})
             except q_exc.QuantumException:
                 self.cleanup_for_service_vm(mgmt_port, t1_n, t2_n, t1_p, t2_p)
                 mgmt_port = None
