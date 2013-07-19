@@ -480,10 +480,12 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
                      return hosting_entities
                 #mgmt_port, t1_n, t1_p, t2_n, t2_p = None, [], [], [], []
                 pdb.set_trace()
+                #Zip and flatten the two port list together
+                ports = [x for t in zip(t1_p, t2_p) for x in t]
                 host_ent = svm.dispatch_service_vm(cfg.CONF.csr1kv_image,
                                                    cfg.CONF.csr1kv_flavor,
                                                    mgmt_port,
-                                                   ports=t1_p+t2_p)
+                                                   ports)
                 if host_ent is not None:
                     hosting_entities.append(host_ent)
                     he_db = HostingEntity(
