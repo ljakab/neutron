@@ -46,6 +46,8 @@ from quantum import manager
 from quantum.openstack.common import log as logging
 from quantum.openstack.common import timeutils
 
+import pdb
+
 
 LOG = logging.getLogger(__name__)
 
@@ -62,7 +64,7 @@ router_appliance_opts = [
                help=_("Default type of router to create")),
     cfg.IntOpt('csr1kv_flavor', default=621,
                help=_("Nova flavor used for CSR1kv VM")),
-    cfg.StrOpt('csr1kv_image', default='csr1kv_openstack_dhcp',
+    cfg.StrOpt('csr1kv_image', default='a3a2b6e7-7e9c-402c-a72c-39680f06e937',
                help=_("Glance image used for CSR1kv VM")),
     cfg.StrOpt('management_network', default='osn_mgmt_nw',
                help=_("Name of management network for CSR VM configuration")),
@@ -477,6 +479,7 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
                      # Required ports could not be created
                      return hosting_entities
                 #mgmt_port, t1_n, t1_p, t2_n, t2_p = None, [], [], [], []
+                pdb.set_trace()
                 host_ent = svm.dispatch_service_vm(cfg.CONF.csr1kv_image,
                                                    cfg.CONF.csr1kv_flavor,
                                                    mgmt_port,
