@@ -176,6 +176,7 @@ class CiscoCSRDriver():
         ioscfg = self.get_running_config()
         parse = CiscoConfParse(ioscfg)
         cfg_raw = parse.find_lines("^" + cfg_str)
+        LOG.debug("cfg_exists(): Found lines %s " % cfg_raw)
         if len(cfg_raw) > 0:
             return True
         else:
