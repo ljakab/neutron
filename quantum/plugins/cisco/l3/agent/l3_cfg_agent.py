@@ -42,8 +42,6 @@ from quantum.plugins.cisco.l3.common import constants as cl3_constants
 from quantum.plugins.cisco.l3.agent.csr1000v import cisco_csr_network_driver
 from quantum import service as quantum_service
 
-import pdb
-
 LOG = logging.getLogger(__name__)
 
 N_ROUTER_PREFIX = 'nrouter-'
@@ -565,7 +563,6 @@ class L3NATAgent(manager.Manager):
 
     def router_deleted(self, context, routers):
         """Deal with router deletion RPC message."""
-        pdb.set_trace()
         if not routers:
             return
         with self.sync_sem:
