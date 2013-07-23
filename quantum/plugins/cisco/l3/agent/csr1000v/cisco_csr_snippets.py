@@ -182,7 +182,7 @@ REMOVE_NAT = """
 SET_STATIC_SRC_TRL = """
 <config>
         <cli-config-data>
-            <cmd>ip nat inside source static %s %s vrf %s </cmd>
+            <cmd>ip nat inside source static %s %s vrf %s match-in-vrf</cmd>
         </cli-config-data>
 </config>
 
@@ -191,7 +191,7 @@ SET_STATIC_SRC_TRL = """
 REMOVE_STATIC_SRC_TRL = """
 <config>
         <cli-config-data>
-            <cmd>no ip nat inside source static %s %s vrf %s </cmd>
+            <cmd>no ip nat inside source static %s %s vrf %s match-in-vrf</cmd>
         </cli-config-data>
 </config>
 

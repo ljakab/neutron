@@ -42,6 +42,8 @@ from quantum.plugins.cisco.l3.common import constants as cl3_constants
 from quantum.plugins.cisco.l3.agent.csr1000v import cisco_csr_network_driver
 from quantum import service as quantum_service
 
+import pdb
+
 LOG = logging.getLogger(__name__)
 
 N_ROUTER_PREFIX = 'nrouter-'
@@ -561,17 +563,22 @@ class L3NATAgent(manager.Manager):
     def floating_ip_removed(self, ri, ex_gw_port, floating_ip, fixed_ip):
         self._csr_remove_floating_ip(ri, floating_ip, fixed_ip)
 
-    def router_deleted(self, context, router_id):
+    def router_deleted(self, context, routers):
         """Deal with router deletion RPC message."""
+        pdb.set_trace()
+        if not routers:
+            return
         with self.sync_sem:
-            if router_id in self.router_info:
-                try:
-                    self._router_removed(router_id)
-                except Exception:
-                    msg = _("Failed dealing with router "
-                            "'%s' deletion RPC message")
-                    LOG.debug(msg, router_id)
-                    self.fullsync = True
+            for router in routers:
+                router_id = router['id']
+                if router_id in self.router_info:
+                    try:
+                        self._router_removed(router_id)
+                    except Exception:
+                        msg = _("Failed dealing with router "
+                                "'%s' deletion RPC message")
+                        LOG.debug(msg, router_id)
+                        self.fullsync = True
 
     def routers_updated(self, context, routers):
         """Deal with routers modification and creation RPC message."""
