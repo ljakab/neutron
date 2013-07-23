@@ -48,7 +48,7 @@ class CiscoCSRDriver():
     def _get_connection(self):
         """Make SSH connection to the CSR """
         try:
-            if self._csr_conn:
+            if self._csr_conn and self._csr_conn.connected:
                 return self._csr_conn
             else:
                 self._csr_conn = manager.connect(host=self._csr_host,
