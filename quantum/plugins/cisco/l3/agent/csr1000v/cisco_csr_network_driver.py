@@ -272,6 +272,17 @@ class CiscoCSRDriver():
         #We acquire a lock on the running config and process the edits
         #as a transaction
         with conn.locked(target='running'):
+            #First remove NAT inside and outside
+            confstr = snippets.REMOVE_NAT % (inner_intfc, 'inside')
+            rpc_obj = conn.edit_config(target='running', config=confstr)
+            print self._check_response(rpc_obj, 'REMOVE_NAT inside')
+
+            confstr = snippets.REMOVE_NAT % (outer_intfc, 'outside')
+            rpc_obj = conn.edit_config(target='running', config=confstr)
+            print self._check_response(rpc_obj, 'REMOVE_NAT outside')
+            #Wait for two second
+            time.sleep(2)
+
             confstr = snippets.SNAT_CFG % (acl_no, outer_intfc, vrf_name)
             if self.cfg_exists(confstr):
                 confstr = snippets.REMOVE_DYN_SRC_TRL_INTFC % (acl_no,
@@ -284,13 +295,7 @@ class CiscoCSRDriver():
             rpc_obj = conn.edit_config(target='running', config=confstr)
             print self._check_response(rpc_obj, 'REMOVE_ACL')
 
-            confstr = snippets.REMOVE_NAT % (inner_intfc, 'inside')
-            rpc_obj = conn.edit_config(target='running', config=confstr)
-            print self._check_response(rpc_obj, 'REMOVE_NAT inside')
 
-            confstr = snippets.REMOVE_NAT % (outer_intfc, 'outside')
-            rpc_obj = conn.edit_config(target='running', config=confstr)
-            print self._check_response(rpc_obj, 'REMOVE_NAT outside')
 
     def add_floating_ip(self, floating_ip, fixed_ip, vrf):
         conn = self._get_connection()
