@@ -19,6 +19,7 @@
 import eventlet
 from eventlet import semaphore
 import netaddr
+import time
 from oslo.config import cfg
 
 from quantum.agent.common import config
@@ -222,55 +223,77 @@ class L3NATAgent(manager.Manager):
         csr_driver = self._he.get_driver(ri.router_id)
         csr_driver.remove_vrf(vrf_name)
 
-    def _csr_create_subinterface(self, ri, intfc_no,
-                                 vlanid, ip_cidrs ):
+    def _csr_create_subinterface(self, ri, port):
+        vrf_name = self._csr_get_vrf_name(ri)
+        ip_cidrs = port['ip_cidr']
         if len(ip_cidrs) > 1:
             #ToDo (Hareesh): Implement ip_cidrs>1
             raise Exception("Not implemented yet")
             #LOG.Error("Multiple entries in ip_cidrs %s" % ip_cidrs)
-        vrf_name = self._csr_get_vrf_name(ri)
         ip_cidr = ip_cidrs[0]
         netmask = netaddr.IPNetwork(ip_cidr).netmask
         gateway_ip = ip_cidr.split('/')[0]
-        interface = 'GigabitEthernet'+str(intfc_no)+'.'+str(vlanid)
+        subinterface = self._get_interface_name_from_hosting_port(port)
+        vlan = self._get_interface_vlan_from_hosting_port(port)
         csr_driver = self._he.get_driver(ri.router_id)
-        csr_driver.create_subinterface(interface,
-                                       vlanid,
+        csr_driver.create_subinterface(subinterface,
+                                       vlan,
                                        vrf_name,
                                        gateway_ip,
                                        netmask)
 
-    def _csr_remove_subinterface(self, ri, intc_no, vlan_id, ip):
+    def _csr_remove_subinterface(self, ri, port):
         vrf_name = self._csr_get_vrf_name(ri)
-        interface = 'GigabitEthernet'+str(intc_no)+'.'+str(vlan_id)
+        subinterface = self._get_interface_name_from_hosting_port()
+        vlan_id = self._get_interface_vlan_from_hosting_port(port)
+        ip = port['fixed_ips'][0]['ip_address']
         csr_driver = self._he.get_driver(ri.router_id)
-        csr_driver.remove_subinterface(interface, vlan_id, vrf_name, ip)
+        csr_driver.remove_subinterface(subinterface, vlan_id, vrf_name, ip)
 
-    def _csr_add_internalnw_nat_rules(self, ri, int_intfc_no,
-                                           ext_intfc_no,
-                                           gw_ip, internal_cidr,
-                                           inner_vlanid, outer_vlanid):
+    def _csr_add_internalnw_nat_rules(self, ri, port, ex_port):
         vrf_name = self._csr_get_vrf_name(ri)
-        acl_no = 'acl_'+str(inner_vlanid)
+        in_vlan = self._get_interface_vlan_from_hosting_port(port)
+        acl_no = 'acl_'+str(in_vlan)
+        internal_cidr = port['ip_cidr']
         internal_net = netaddr.IPNetwork(internal_cidr).network
         netmask = netaddr.IPNetwork(internal_cidr).hostmask
-        inner_intfc = 'GigabitEthernet'+str(int_intfc_no)+'.'+str(inner_vlanid)
-        outer_intfc = 'GigabitEthernet'+str(ext_intfc_no)+'.'+str(outer_vlanid)
-
-        #nat_pool_name = 'snat_net_'+(ri.ns_name()[:self.driver.DEV_NAME_LEN])
+        inner_intfc = self._get_interface_name_from_hosting_port(port)
+        outer_intfc = self._get_interface_name_from_hosting_port(ex_port)
         csr_driver = self._he.get_driver(ri.router_id)
-        csr_driver.nat_rules_for_internet_access(acl_no,
-                                                       internal_net,
-                                                       netmask,
-                                                       inner_intfc,
-                                                       outer_intfc,
-                                                       vrf_name)
+        csr_driver.nat_rules_for_internet_access(acl_no, internal_net,netmask,
+                                                 inner_intfc,
+                                                 outer_intfc,
+                                                 vrf_name)
 
-    def _csr_remove_internalnw_nat_rules(self, ri, int_intfc_no,
+    def _csr_remove_internalnw_nat_rules(self, ri, ports, ex_port):
+        acls=[]
+        csr_driver = self._he.get_driver(ri.router_id)
+        #First disable nat in all inner ports
+        for port in ports:
+            in_intfc_name = self._get_interface_name_from_hosting_port(port)
+            inner_vlan = self._get_interface_vlan_from_hosting_port(port)
+            acls.append("acl_"+inner_vlan)
+            csr_driver.remove_interface_nat(in_intfc_name, 'inside')
+
+        #Wait for two second
+        LOG.debug(_("Sleep for 2 seconds before clearing NAT rules"))
+        time.sleep(2)
+
+        #Clear the NAT translation table
+        csr_driver.remove_dyn_nat_translations()
+
+        # Remove dynamic NAT rules and ACLs
+        vrf_name = self._csr_get_vrf_name(ri)
+        ext_intfc_name = self._get_interface_name_from_hosting_port(ex_port)
+        for acl in acls:
+            csr_driver.remove_dyn_nat_rule(acl, ext_intfc_name, vrf_name)
+
+    def old_csr_remove_internalnw_nat_rules(self, ri, int_intfc_no,
                                          ext_intfc_no,
                                          internal_cidr,
                                          inner_vlanid,
                                          outer_vlanid):
+        #ToDo(Hareesh): Remove function after verification
         vrf_name = self._csr_get_vrf_name(ri)
         acl_no = 'acl_'+str(inner_vlanid)
         internal_net = netaddr.IPNetwork(internal_cidr).network
@@ -324,7 +347,28 @@ class L3NATAgent(manager.Manager):
                                            next_hop, vrf_name)
         else:
             LOG.error(_('Unknown route command %s'), cmd)
-        pass
+
+    def _get_interface_name_from_hosting_port(self, port):
+        vlan = self._get_interface_vlan_from_hosting_port(port)
+        int_no = self._get_interface_no_from_hosting_port(port)
+        intfc_name = 'GigabitEthernet'+str(int_no)+'.'+str(vlan)
+        return intfc_name
+
+    def _get_interface_vlan_from_hosting_port(self, port):
+        trunk_info = port['trunk_info']
+        vlan = trunk_info['segmentation_id']
+        return vlan
+
+    def _get_interface_no_from_hosting_port(self, port):
+        _name = port['trunk_info']['hosting_port_name']
+        type = _name.split(':')[0]
+        if type == 't1':
+            no = str(int(_name.split(':')[1])*2-1)
+        elif type == 't2':
+            no = str(int(_name.split(':')[1])*2)
+        else:
+            LOG.error(_('Unknown interface name (neither t1 or t2): %s'), type)
+         return no
 
     def _fetch_external_net_id(self):
         """Find UUID of single external network for this agent."""
@@ -389,24 +433,19 @@ class L3NATAgent(manager.Manager):
         for p in new_ports:
             self._set_subnet_info(p)
             ri.internal_ports.append(p)
-            self.internal_network_added(ri, ex_gw_port,
-                                        p['ip_cidr'],
-                                        p['trunk_info'])
+            self.internal_network_added(ri, ex_gw_port, p)
 
         for p in old_ports:
             ri.internal_ports.remove(p)
-            self.internal_network_removed(ri, ex_gw_port,
-                                          p['ip_cidr'],
-                                          p['trunk_info'])
+            self.internal_network_removed(ri, ex_gw_port, p)
 
         internal_cidrs = [p['ip_cidr'] for p in ri.internal_ports]
 
         if ex_gw_port and not ri.ex_gw_port:
             self._set_subnet_info(ex_gw_port)
-            self.external_gateway_added(ri, ex_gw_port, internal_cidrs)
+            self.external_gateway_added(ri, ex_gw_port)
         elif not ex_gw_port and ri.ex_gw_port:
-            self.external_gateway_removed(ri, ri.ex_gw_port,
-                                          internal_cidrs)
+            self.external_gateway_removed(ri, ri.ex_gw_port)
 
         if ri.ex_gw_port or ex_gw_port:
             self.process_router_floating_ips(ri, ex_gw_port)
@@ -459,100 +498,40 @@ class L3NATAgent(manager.Manager):
     def _get_ex_gw_port(self, ri):
         return ri.router.get('gw_port')
 
-    def external_gateway_added(self, ri, ex_gw_port, internal_cidrs):
-        #ToDo (Hareesh) : Parameterize interface name
-        trunk_info = ex_gw_port['trunk_info']
-        outer_vlan = trunk_info['segmentation_id']
-        _name = trunk_info['hosting_port_name']
-        #Name will be of format 'T2:x' where x is (1,2,..)
-        ext_itfc_no = str(int(_name.split(':')[1])*2)
-        self._csr_create_subinterface(ri, ext_itfc_no, outer_vlan,
-                                      [ex_gw_port['ip_cidr']])
-        #ToDo(Hareesh) : Check need to send gratuitous ARP
+    def external_gateway_added(self, ri, ex_gw_port):
+        self._csr_create_subinterface(ri, ex_gw_port)
         ex_gw_ip = ex_gw_port['subnet']['gateway_ip']
         if ex_gw_ip:
             #Set default route via this network's gateway ip
-            # In linux : cmd = ['route', 'add', 'default', 'gw', gw_ip]
             self._csr_add_default_route(ri, ex_gw_ip)
-
         #Apply NAT rules for internal networks
         if len(ri.internal_ports) > 0:
-            for internal_port in ri.internal_ports:
-                trunk_info = internal_port['trunk_info']
-                inner_vlan = trunk_info['segmentation_id']
-                _name = trunk_info['hosting_port_name']
-                #Name will be of format 'T1:x' where x is the index(1,2,..)
-                int_itfc_no = str(int(_name.split(':')[1])*2-1)
-                internal_cidr = internal_port['ip_cidr']
-                self._csr_add_internalnw_nat_rules(ri, int_itfc_no, ext_itfc_no,
-                                                   ex_gw_ip, internal_cidr,
-                                                   inner_vlan, outer_vlan)
+            for port in ri.internal_ports:
+                self._csr_add_internalnw_nat_rules(ri, port, ex_gw_port)
 
-    def external_gateway_removed(self, ri, ex_gw_port, internal_cidrs):
-        ip = ex_gw_port['fixed_ips'][0]['ip_address']
-        outer_vlan = ex_gw_port['trunk_info']['segmentation_id']
-        _ext_name = ex_gw_port['trunk_info']['hosting_port_name']
-        #Name will be of format 'T2:x' where x is the index(1,2,..)
-        ext_infc_no = str(int(_ext_name.split(':')[1])*2)
+    def external_gateway_removed(self, ri, ex_gw_port):
         #Remove internal network NAT rules
         if len(ri.internal_ports) > 0:
-            for port in ri.internal_ports:
-                trunk_info = port['trunk_info']
-                inner_vlan = trunk_info['segmentation_id']
-                _name = trunk_info['hosting_port_name']
-                #Name will be of format 'T1:x' where x is the index(1,2,..)
-                int_itfc_no = str(int(_name.split(':')[1])*2-1)
-                internal_cidr = port['ip_cidr']
-                self._csr_remove_internalnw_nat_rules(ri, int_itfc_no,
-                                                      ext_infc_no,
-                                                      internal_cidr,
-                                                      inner_vlan,
-                                                      outer_vlan)
+            self._csr_remove_internalnw_nat_rules(ri, ri.internalports, ex_gw_port)
+
         ex_gw_ip = ex_gw_port['subnet']['gateway_ip']
-        if ex_gw_ip:
-        #Remove default route via this network's gateway ip
+        if gw_ip:
+            #Remove default route via this network's gateway ip
             self._csr_remove_default_route(ri, ex_gw_ip)
+
         #Finally, remove external network subinterface
-        self._csr_remove_subinterface(ri, ext_infc_no, outer_vlan, ip)
+        self._csr_remove_subinterface(ri, ex_gw_port)
 
-
-    def internal_network_added(self, ri, ex_gw_port,
-                               internal_cidr, trunk_info):
-        inner_vlan = trunk_info['segmentation_id']
-        _name = trunk_info['hosting_port_name']
-        #Name will be of format 'T1:x' where x is the index(1,2,..)
-        itfc_no = str(int(_name.split(':')[1])*2-1)
-        self._csr_create_subinterface(ri, itfc_no, inner_vlan, [internal_cidr])
-
+    def internal_network_added(self, ri, ex_gw_port, port):
+        self._csr_create_subinterface(ri, port)
         if ex_gw_port:
-            ex_gw_ip = ex_gw_port['fixed_ips'][0]['ip_address']
-            # Hareesh: Apply CSR internal_network_nat_rules
-            #External Port
-            outer_vlan = ex_gw_port['trunk_info']['segmentation_id']
-            _ext_name = ex_gw_port['trunk_info']['hosting_port_name']
-            #Name will be of format 'T2:x' where x is the index(1,2,..)
-            ext_infc_no = str(int(_ext_name.split(':')[1])*2)
-            self._csr_add_internalnw_nat_rules(ri, itfc_no, ext_infc_no,
-                                               ex_gw_ip, internal_cidr,
-                                               inner_vlan, outer_vlan)
+            self._csr_add_internalnw_nat_rules(ri, port, ex_gw_port)
 
-    def internal_network_removed(self, ri, ex_gw_port,
-                                 internal_cidr, trunk_info):
-        #Hareesh : CSR
-        inner_vlan = trunk_info['segmentation_id']
-        _name = trunk_info['hosting_port_name']
-        #Name will be of format 'T1:x' where x is the index(1,2,..)
-        itfc_no = str(int(_name.split(':')[1])*2-1)
+    def internal_network_removed(self, ri, ex_gw_port, port):
         if ex_gw_port:
-            outer_vlan = ex_gw_port['trunk_info']['segmentation_id']
-            _ext_name = ex_gw_port['trunk_info']['hosting_port_name']
-            #Name will be of format 'T2:x' where x is the index(1,2,..)
-            ext_itfc_no = str(int(_ext_name.split(':')[1])*2)
-            self._csr_remove_internalnw_nat_rules(ri, itfc_no, ext_itfc_no,
-                                                  internal_cidr, inner_vlan,
-                                                  outer_vlan)
-        #Delete sub-interface now
-        self._csr_remove_subinterface(ri, itfc_no, inner_vlan, internal_cidr)
+            self._csr_remove_internalnw_nat_rules(ri, [port], ex_gw_port)
+        #Delete sub-interface
+        self._csr_remove_subinterface(ri, port)
 
     def floating_ip_added(self, ri, ex_gw_port, floating_ip, fixed_ip):
         #ToDo(Hareesh) : Check send gratiotious ARP packet

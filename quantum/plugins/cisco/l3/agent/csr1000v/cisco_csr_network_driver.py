@@ -108,9 +108,11 @@ class CiscoCSRDriver():
             return False
 
     def _enable_intfs(self, conn):
+        #interfaces = ['GigabitEthernet 1', 'GigabitEthernet 2']
+
         interfaces = ['GigabitEthernet 1', 'GigabitEthernet 2',
-                      'GigabitEthernet 3', 'GigabitEthernet 4',
-                      'GigabitEthernet 5', 'GigabitEthernet 6']
+                       'GigabitEthernet 3', 'GigabitEthernet 4',
+                       'GigabitEthernet 5', 'GigabitEthernet 6' ]
         try:
             for i in interfaces:
                 confstr = snippets.ENABLE_INTF % i
@@ -218,6 +220,7 @@ class CiscoCSRDriver():
         print self._check_response(rpc_obj, 'CREATE_SUBINTERFACE')
 
     def remove_subinterface(self, subinterface, vlan_id, vrf_name, ip):
+        #Optional : verify this is the correct subinterface
         conn = self._get_connection()
         if self.interface_exists(subinterface):
             confstr = snippets.REMOVE_SUBINTERFACE % (subinterface)
@@ -262,7 +265,7 @@ class CiscoCSRDriver():
         # finally:
         #     conn.unlock(target='running')
 
-    def remove_nat_rules_for_internet_access(self, acl_no,
+    def old_remove_nat_rules_for_internet_access(self, acl_no,
                                              network,
                                              netmask,
                                              inner_intfc,
@@ -280,8 +283,7 @@ class CiscoCSRDriver():
             confstr = snippets.REMOVE_NAT % (outer_intfc, 'outside')
             rpc_obj = conn.edit_config(target='running', config=confstr)
             print self._check_response(rpc_obj, 'REMOVE_NAT outside')
-            #Wait for two second
-            time.sleep(2)
+
 
             confstr = snippets.SNAT_CFG % (acl_no, outer_intfc, vrf_name)
             if self.cfg_exists(confstr):
@@ -295,7 +297,32 @@ class CiscoCSRDriver():
             rpc_obj = conn.edit_config(target='running', config=confstr)
             print self._check_response(rpc_obj, 'REMOVE_ACL')
 
+    def remove_interface_nat(self, intfc_name, type):
+        conn = self._get_connection()
+        confstr = snippets.REMOVE_NAT % (intfc_name, type)
+        rpc_obj = conn.edit_config(target='running', config=confstr)
+        print self._check_response(rpc_obj, 'REMOVE_NAT '+type)
 
+    def remove_dyn_nat_rule(self,acl_no, outer_intfc_name, vrf_name):
+        conn = self._get_connection()
+        confstr = snippets.SNAT_CFG % (acl_no, outer_intfc_name, vrf_name)
+        if self.cfg_exists(confstr):
+            confstr = snippets.REMOVE_DYN_SRC_TRL_INTFC % (acl_no,
+                                                           outer_intfc_name,
+                                                           vrf_name)
+            rpc_obj = conn.edit_config(target='running', config=confstr)
+            print self._check_response(rpc_obj, 'REMOVE_DYN_SRC_TRL_INTFC')
+
+        confstr = snippets.REMOVE_ACL % acl_no
+        rpc_obj = conn.edit_config(target='running', config=confstr)
+        print self._check_response(rpc_obj, 'REMOVE_ACL')
+
+
+    def remove_dyn_nat_translations(self):
+        conn = self._get_connection()
+        confstr = snippets.CLEAR_DYN_NAT_TRANS
+        rpc_obj = conn.get(("subtree",confstr))
+        print rpc_obj
 
     def add_floating_ip(self, floating_ip, fixed_ip, vrf):
         conn = self._get_connection()
@@ -398,7 +425,7 @@ if __name__ == "__main__":
         #driver.set_interface(conn, 'GigabitEthernet1', '10.0.200.1')
         #driver.get_interfaces(conn)
         #driver.get_interface_ip(conn, 'GigabitEthernet1')
-        driver.create_vrf('nrouter-dummy')
+        #driver.create_vrf('nrouter-dummy')
         #driver.create_router(1, 'qrouter-dummy2', '10.0.110.1', 11)
         #driver.create_subinterface('GigabitEthernet1.11', 'qrouter-131666dc', '10.0.11.1', '11', '255.255.255.0')
         #driver.remove_subinterface('GigabitEthernet1.11', 'qrouter-131666dc', '10.0.11.1', '11', '255.255.255.0')
@@ -427,4 +454,5 @@ if __name__ == "__main__":
         #print driver.if_interface_exists('GigabitEthernet1.10')
         # print driver.cfg_exists("ip nat inside source list acl_12 interface GigabitEthernet2.100 vrf nrouter-93bff2 overload")
         # print driver.cfg_exists("ip nat inside source list acl_121 interface GigabitEthernet2.100 vrf nrouter-93bff2 overload")
+        #driver.remove_dyn_nat_translations()
         print "All done"
