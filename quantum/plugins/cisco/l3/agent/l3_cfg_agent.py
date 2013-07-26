@@ -227,12 +227,7 @@ class L3NATAgent(manager.Manager):
 
     def _csr_create_subinterface(self, ri, port):
         vrf_name = self._csr_get_vrf_name(ri)
-        ip_cidrs = port['ip_cidr']
-        if len(ip_cidrs) > 1:
-            #ToDo (Hareesh): Implement ip_cidrs>1
-            raise Exception("Not implemented yet")
-            #LOG.Error("Multiple entries in ip_cidrs %s" % ip_cidrs)
-        ip_cidr = ip_cidrs[0]
+        ip_cidr = port['ip_cidr']
         netmask = netaddr.IPNetwork(ip_cidr).netmask
         gateway_ip = ip_cidr.split('/')[0]
         subinterface = self._get_interface_name_from_hosting_port(port)
