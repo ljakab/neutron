@@ -47,6 +47,7 @@ LOG = logging.getLogger(__name__)
 
 N_ROUTER_PREFIX = 'nrouter-'
 
+
 class L3PluginApi(proxy.RpcProxy):
     """Agent side of the l3 agent RPC API.
 
@@ -102,7 +103,8 @@ class HostingEntities(object):
                 LOG.error(_("No valid driver found for Hosting Entity: %s"),
                           hosting_entity)['id']
         else:
-            LOG.error(_("Cannot find hosting entity for: %s"), hosting_entity['id'])
+            LOG.error(_("Cannot find hosting entity for: %s"),
+                      hosting_entity['id'])
         return driver
 
     def set_driver(self, router_id, router):
@@ -142,7 +144,7 @@ class RouterInfo(object):
         self.routes = []
 
     def router_name(self):
-        return N_ROUTER_PREFIX+self.router_id
+        return N_ROUTER_PREFIX + self.router_id
 
 
 class L3NATAgent(manager.Manager):
@@ -253,26 +255,26 @@ class L3NATAgent(manager.Manager):
     def _csr_add_internalnw_nat_rules(self, ri, port, ex_port):
         vrf_name = self._csr_get_vrf_name(ri)
         in_vlan = self._get_interface_vlan_from_hosting_port(port)
-        acl_no = 'acl_'+str(in_vlan)
+        acl_no = 'acl_' + str(in_vlan)
         internal_cidr = port['ip_cidr']
         internal_net = netaddr.IPNetwork(internal_cidr).network
         netmask = netaddr.IPNetwork(internal_cidr).hostmask
         inner_intfc = self._get_interface_name_from_hosting_port(port)
         outer_intfc = self._get_interface_name_from_hosting_port(ex_port)
         csr_driver = self._he.get_driver(ri.router_id)
-        csr_driver.nat_rules_for_internet_access(acl_no, internal_net,netmask,
+        csr_driver.nat_rules_for_internet_access(acl_no, internal_net, netmask,
                                                  inner_intfc,
                                                  outer_intfc,
                                                  vrf_name)
 
     def _csr_remove_internalnw_nat_rules(self, ri, ports, ex_port):
-        acls=[]
+        acls = []
         csr_driver = self._he.get_driver(ri.router_id)
         #First disable nat in all inner ports
         for port in ports:
             in_intfc_name = self._get_interface_name_from_hosting_port(port)
             inner_vlan = self._get_interface_vlan_from_hosting_port(port)
-            acls.append("acl_"+inner_vlan)
+            acls.append("acl_" + inner_vlan)
             csr_driver.remove_interface_nat(in_intfc_name, 'inside')
 
         #Wait for two second
@@ -295,20 +297,22 @@ class L3NATAgent(manager.Manager):
                                          outer_vlanid):
         #ToDo(Hareesh): Remove function after verification
         vrf_name = self._csr_get_vrf_name(ri)
-        acl_no = 'acl_'+str(inner_vlanid)
+        acl_no = 'acl_' + str(inner_vlanid)
         internal_net = netaddr.IPNetwork(internal_cidr).network
         netmask = netaddr.IPNetwork(internal_cidr).hostmask
-        inner_intfc = 'GigabitEthernet'+str(int_intfc_no)+'.'+str(inner_vlanid)
-        outer_intfc = 'GigabitEthernet'+str(ext_intfc_no)+'.'+str(outer_vlanid)
+        inner_intfc = ('GigabitEthernet' + str(int_intfc_no) + '.'
+                      + str(inner_vlanid))
+        outer_intfc = ('GigabitEthernet' + str(ext_intfc_no) + '.'
+                      + str(outer_vlanid))
         csr_driver = self._he.get_driver(ri.router_id)
         csr_driver.remove_nat_rules_for_internet_access(acl_no,
-                                                           internal_net,
-                                                           netmask,
-                                                           inner_intfc,
-                                                           outer_intfc,
-                                                           vrf_name)
+                                                        internal_net,
+                                                        netmask,
+                                                        inner_intfc,
+                                                        outer_intfc,
+                                                        vrf_name)
 
-    def _csr_add_floating_ip(self,ri, floating_ip, fixed_ip):
+    def _csr_add_floating_ip(self, ri, floating_ip, fixed_ip):
         vrf_name = self._csr_get_vrf_name(ri)
         csr_driver = self._he.get_driver(ri.router_id)
         csr_driver.add_floating_ip(floating_ip, fixed_ip, vrf_name)
@@ -351,7 +355,7 @@ class L3NATAgent(manager.Manager):
     def _get_interface_name_from_hosting_port(self, port):
         vlan = self._get_interface_vlan_from_hosting_port(port)
         int_no = self._get_interface_no_from_hosting_port(port)
-        intfc_name = 'GigabitEthernet'+str(int_no)+'.'+str(vlan)
+        intfc_name = 'GigabitEthernet' + str(int_no) + '.' + str(vlan)
         return intfc_name
 
     def _get_interface_vlan_from_hosting_port(self, port):
@@ -363,12 +367,12 @@ class L3NATAgent(manager.Manager):
         _name = port['trunk_info']['hosting_port_name']
         type = _name.split(':')[0]
         if type == 't1':
-            no = str(int(_name.split(':')[1])*2-1)
+            no = str(int(_name.split(':')[1]) * 2 - 1)
         elif type == 't2':
-            no = str(int(_name.split(':')[1])*2)
+            no = str(int(_name.split(':')[1]) * 2)
         else:
             LOG.error(_('Unknown interface name (neither t1 or t2): %s'), type)
-         return no
+        return no
 
     def _fetch_external_net_id(self):
         """Find UUID of single external network for this agent."""
@@ -512,7 +516,8 @@ class L3NATAgent(manager.Manager):
     def external_gateway_removed(self, ri, ex_gw_port):
         #Remove internal network NAT rules
         if len(ri.internal_ports) > 0:
-            self._csr_remove_internalnw_nat_rules(ri, ri.internalports, ex_gw_port)
+            self._csr_remove_internalnw_nat_rules(ri, ri.internalports,
+                                                  ex_gw_port)
 
         ex_gw_ip = ex_gw_port['subnet']['gateway_ip']
         if gw_ip:
@@ -564,7 +569,8 @@ class L3NATAgent(manager.Manager):
             try:
                 self._process_routers(routers)
             except Exception:
-                msg = _("Failed dealing with routers update RPC message. Exception %s")
+                msg = _("Failed dealing with routers update RPC message. "
+                        "Exception %s")
                 LOG.debug(msg, str(Exception))
                 self.fullsync = True
 
@@ -738,5 +744,6 @@ def main():
         binary='quantum-l3-cfg-agent',
         topic=cl3_constants.L3_CFG_AGENT,
         report_interval=cfg.CONF.AGENT.report_interval,
-        manager='quantum.plugins.cisco.l3.agent.l3_cfg_agent.L3NATAgentWithStateReport')
+        manager=('quantum.plugins.cisco.l3.agent.'
+                'l3_cfg_agent.L3NATAgentWithStateReport'))
     service.launch(server).wait()
