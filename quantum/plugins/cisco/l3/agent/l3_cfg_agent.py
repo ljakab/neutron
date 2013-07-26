@@ -241,7 +241,7 @@ class L3NATAgent(manager.Manager):
 
     def _csr_remove_subinterface(self, ri, port):
         vrf_name = self._csr_get_vrf_name(ri)
-        subinterface = self._get_interface_name_from_hosting_port()
+        subinterface = self._get_interface_name_from_hosting_port(port)
         vlan_id = self._get_interface_vlan_from_hosting_port(port)
         ip = port['fixed_ips'][0]['ip_address']
         csr_driver = self._he.get_driver(ri.router_id)
@@ -269,7 +269,7 @@ class L3NATAgent(manager.Manager):
         for port in ports:
             in_intfc_name = self._get_interface_name_from_hosting_port(port)
             inner_vlan = self._get_interface_vlan_from_hosting_port(port)
-            acls.append("acl_" + inner_vlan)
+            acls.append("acl_" + str(inner_vlan))
             csr_driver.remove_interface_nat(in_intfc_name, 'inside')
 
         #Wait for two second
@@ -511,11 +511,11 @@ class L3NATAgent(manager.Manager):
     def external_gateway_removed(self, ri, ex_gw_port):
         #Remove internal network NAT rules
         if len(ri.internal_ports) > 0:
-            self._csr_remove_internalnw_nat_rules(ri, ri.internalports,
+            self._csr_remove_internalnw_nat_rules(ri, ri.internal_ports,
                                                   ex_gw_port)
 
         ex_gw_ip = ex_gw_port['subnet']['gateway_ip']
-        if gw_ip:
+        if ex_gw_ip:
             #Remove default route via this network's gateway ip
             self._csr_remove_default_route(ri, ex_gw_ip)
 
@@ -566,7 +566,7 @@ class L3NATAgent(manager.Manager):
             except Exception:
                 msg = _("Failed dealing with routers update RPC message. "
                         "Exception %s")
-                LOG.debug(msg, str(Exception))
+                LOG.error(msg, str(Exception))
                 self.fullsync = True
 
     def router_removed_from_agent(self, context, payload):
