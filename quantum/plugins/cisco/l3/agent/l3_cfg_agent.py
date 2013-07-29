@@ -285,37 +285,23 @@ class L3NATAgent(manager.Manager):
         for acl in acls:
             csr_driver.remove_dyn_nat_rule(acl, ext_intfc_name, vrf_name)
 
-    def old_csr_remove_internalnw_nat_rules(self, ri, int_intfc_no,
-                                         ext_intfc_no,
-                                         internal_cidr,
-                                         inner_vlanid,
-                                         outer_vlanid):
-        #ToDo(Hareesh): Remove function after verification
-        vrf_name = self._csr_get_vrf_name(ri)
-        acl_no = 'acl_' + str(inner_vlanid)
-        internal_net = netaddr.IPNetwork(internal_cidr).network
-        netmask = netaddr.IPNetwork(internal_cidr).hostmask
-        inner_intfc = ('GigabitEthernet' + str(int_intfc_no) + '.'
-                      + str(inner_vlanid))
-        outer_intfc = ('GigabitEthernet' + str(ext_intfc_no) + '.'
-                      + str(outer_vlanid))
-        csr_driver = self._he.get_driver(ri.router_id)
-        csr_driver.remove_nat_rules_for_internet_access(acl_no,
-                                                        internal_net,
-                                                        netmask,
-                                                        inner_intfc,
-                                                        outer_intfc,
-                                                        vrf_name)
-
     def _csr_add_floating_ip(self, ri, floating_ip, fixed_ip):
         vrf_name = self._csr_get_vrf_name(ri)
         csr_driver = self._he.get_driver(ri.router_id)
         csr_driver.add_floating_ip(floating_ip, fixed_ip, vrf_name)
 
-    def _csr_remove_floating_ip(self, ri, floating_ip, fixed_ip):
+    def _csr_remove_floating_ip(self, ri, ex_gw_port, floating_ip, fixed_ip):
         vrf_name = self._csr_get_vrf_name(ri)
+        out_intfc_name = self._get_interface_name_from_hosting_port(ex_gw_port)
         csr_driver = self._he.get_driver(ri.router_id)
+        # First remove NAT from outer interface
+        csr_driver.remove_interface_nat(out_intfc_name, 'outside')
+        #Clear the NAT translation table
+        csr_driver.remove_dyn_nat_translations()
+        #Remove the floating ip
         csr_driver.remove_floating_ip(floating_ip, fixed_ip, vrf_name)
+        #Enable NAT on outer interface
+        csr_driver.add_interface_nat(out_intfc_name, 'outside')
 
     def _csr_add_default_route(self, ri, gw_ip):
         vrf_name = self._csr_get_vrf_name(ri)
@@ -538,7 +524,7 @@ class L3NATAgent(manager.Manager):
         self._csr_add_floating_ip(ri, floating_ip, fixed_ip)
 
     def floating_ip_removed(self, ri, ex_gw_port, floating_ip, fixed_ip):
-        self._csr_remove_floating_ip(ri, floating_ip, fixed_ip)
+        self._csr_remove_floating_ip(ri, ex_gw_port, floating_ip, fixed_ip)
 
     def router_deleted(self, context, routers):
         """Deal with router deletion RPC message."""

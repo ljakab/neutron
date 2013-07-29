@@ -112,7 +112,7 @@ class CiscoCSRDriver():
 
         interfaces = ['GigabitEthernet 1', 'GigabitEthernet 2',
                        'GigabitEthernet 3', 'GigabitEthernet 4',
-                       'GigabitEthernet 5', 'GigabitEthernet 6' ]
+                       'GigabitEthernet 5', 'GigabitEthernet 6']
         try:
             for i in interfaces:
                 confstr = snippets.ENABLE_INTF % i
@@ -296,6 +296,12 @@ class CiscoCSRDriver():
             confstr = snippets.REMOVE_ACL % acl_no
             rpc_obj = conn.edit_config(target='running', config=confstr)
             print self._check_response(rpc_obj, 'REMOVE_ACL')
+
+    def add_interface_nat(self, intfc_name, type):
+        conn = self._get_connection()
+        confstr = snippets.SET_NAT % (intfc_name, type)
+        rpc_obj = conn.edit_config(target='running', config=confstr)
+        print self._check_response(rpc_obj, 'SET_NAT '+type)
 
     def remove_interface_nat(self, intfc_name, type):
         conn = self._get_connection()

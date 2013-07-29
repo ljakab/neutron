@@ -234,6 +234,6 @@ REMOVE_DEFAULT_ROUTE = """
 
 CLEAR_DYN_NAT_TRANS = """
 <oper-data-format-text-block>
-    <exec>clear ip nat translation *</exec>
+    <exec>clear ip nat translation forced</exec>
 </oper-data-format-text-block>
 """
