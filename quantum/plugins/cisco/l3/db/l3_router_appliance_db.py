@@ -16,6 +16,8 @@
 #
 # @author: Bob Melander, Cisco Systems, Inc.
 
+import string
+
 from oslo.config import cfg
 import sqlalchemy as sa
 from sqlalchemy import and_
@@ -38,7 +40,8 @@ from quantum.db import extraroute_db
 from quantum.db import l3_db
 from quantum.db import model_base
 from quantum.db import models_v2
-from quantum.extensions import trunkport
+from quantum.extensions import providernet as pr_net
+from quantum.plugins.cisco.extensions import n1kv_profile
 from quantum.plugins.cisco.l3.common import service_vm_lib
 from quantum.plugins.cisco.l3.common import l3_rpc_joint_agent_api
 from quantum.plugins.cisco.l3.common import constants as cl3_const
@@ -53,7 +56,7 @@ LOG = logging.getLogger(__name__)
 
 
 #TODO(bob-melander): Update this for the N1kv plugin
-TRUNKED_NETWORKS = trunkport.TRUNKED_NETWORKS
+TRUNKED_NETWORKS = 'trunked_networks'
 
 #TODO(bob-melander): Revisit these configurations to remove
 #some if possible
@@ -66,6 +69,16 @@ router_appliance_opts = [
                help=_("Nova flavor used for CSR1kv VM")),
     cfg.StrOpt('csr1kv_image', default='338f3cc4-223f-4859-aa31-86debcde7546',
                help=_("Glance image used for CSR1kv VM")),
+    cfg.StrOpt('management_port_profile', default='osn_mgmt_pp',
+               help=_("Name of N1kv port profile for management ports")),
+    cfg.StrOpt('t1_port_profile', default='osn_t1_pp',
+               help=_("Name of N1kv port profile for T1 ports")),
+    cfg.StrOpt('t2_port_profile', default='osn_t2_pp',
+               help=_("Name of N1kv port profile for T2 ports")),
+    cfg.StrOpt('t1_network_profile', default='osn_t1_np',
+               help=_("Name of N1kv network profile for T1 networks")),
+    cfg.StrOpt('t2_network_profile', default='osn_t2_np',
+               help=_("Name of N1kv network profile for T2 networks")),
     cfg.StrOpt('management_network', default='osn_mgmt_nw',
                help=_("Name of management network for CSR VM configuration")),
     cfg.StrOpt('default_security_group', default='mgmt_sec_grp',
@@ -179,12 +192,36 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
     """ Mixin class to support router appliances to implement Quantum's
         L3 routing functionality """
 
-    _mgmt_nw_uuid = None
-    _l3_tenant_uuid = None
+    # TODO(bobmel): Set to correct value during start of Quantum
+    _plugin = cl3_const.N1KV_PLUGIN
+
     _svc_vm_mgr = None
+    _l3_tenant_uuid = None
+
+    _n1kv_mgmt_pp_id = None
+    _n1kv_t1_pp_id = None
+    _n1kv_t2_pp_id = None
+    _n1kv_t1_np_id = None
+    _n1kv_t2_np_id = None
+
+    _mgmt_nw_uuid = None
     _csr_mgmt_sec_grp_id = None
 
     hosting_scheduler = None
+
+    @classmethod
+    def svc_vm_mgr(cls):
+        if cls._svc_vm_mgr is None:
+            auth_url = (cfg.CONF.keystone_authtoken.auth_protocol + "://" +
+                        cfg.CONF.keystone_authtoken.auth_host + ":" +
+                        str(cfg.CONF.keystone_authtoken.auth_port) + "/v2.0")
+            username = cfg.CONF.keystone_authtoken.admin_user
+            pw = cfg.CONF.keystone_authtoken.admin_password
+            tenant = cfg.CONF.l3_admin_tenant
+            cls._svc_vm_mgr = service_vm_lib.ServiceVMManager(
+                user=username, passwd=pw, l3_admin_tenant=tenant,
+                auth_url=auth_url)
+        return cls._svc_vm_mgr
 
     @classmethod
     def l3_tenant_id(cls):
@@ -208,6 +245,74 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
                 LOG.error(_('Multiple tenants matches found for %s'),
                             cfg.CONF.l3_admin_tenant)
         return cls._l3_tenant_uuid
+
+    @classmethod
+    def _get_profile_id(cls, p_type, resource, name):
+        tenant_id = cls.l3_tenant_id()
+        if not tenant_id:
+            return
+        if p_type == 'net_profile':
+            profiles = manager.QuantumManager.get_plugin().get_network_profiles(
+                q_context.get_admin_context(),
+                {'tenant_id': [tenant_id],
+                 'name': [name]},
+                ['id'])
+        else:
+            profiles = manager.QuantumManager.get_plugin().get_policy_profiles(
+                q_context.get_admin_context(),
+                {'tenant_id': [tenant_id],
+                 'name': [name]},
+                ['id'])
+        if len(profiles) == 1:
+            return profiles[0]
+        elif len(profiles) > 1:
+            # Profile must have a unique name.
+            LOG.error(_('The %(resource)s %(name)s does not have unique name. '
+                        'Please refer to admin guide and create one.'),
+                      {'resource': resource, 'name': name})
+        else:
+            # Profile has not been created.
+            LOG.error(_('There is no %{resource}s %{name}s. Please refer to '
+                        'admin guide and create one.'),
+                      {'resource': resource, 'name': name})
+
+    @classmethod
+    def n1kv_mgmt_pp_id(cls):
+        if cls._n1kv_mgmt_pp_id is None:
+            cls._n1kv_mgmt_pp_id = cls._get_profile_id(
+                'port_profile', 'N1kv port profile',
+                cfg.CONF.management_port_profile)
+        return cls._n1kv_mgmt_pp_id
+
+    @classmethod
+    def n1kv_t1_pp_id(cls):
+        if cls._n1kv_t1_pp_id is None:
+            cls._n1kv_t1_pp_id = cls._get_profile_id(
+                'port_profile', 'N1kv port profile', cfg.CONF.t1_port_profile)
+        return cls._n1kv_t1_pp_id
+
+    @classmethod
+    def n1kv_t2_pp_id(cls):
+        if cls._n1kv_t2_pp_id is None:
+            cls._n1kv_t2_pp_id = cls._get_profile_id(
+                'port_profile', 'N1kv port profile', cfg.CONF.t2_port_profile)
+        return cls._n1kv_t2_pp_id
+
+    @classmethod
+    def n1kv_t1_np_id(cls):
+        if cls._n1kv_t1_np_id is None:
+            cls._n1kv_t1_np_id = cls._get_profile_id(
+                'net_profile', 'N1kv network profile',
+                cfg.CONF.t1_network_profile)
+        return cls._n1kv_t1_np_id
+
+    @classmethod
+    def n1kv_t2_np_id(cls):
+        if cls._n1kv_t2_np_id is None:
+            cls._n1kv_t2_np_id = cls._get_profile_id(
+                'net_profile', 'N1kv network profile',
+                cfg.CONF.t2_network_profile)
+        return cls._n1kv_t2_np_id
 
     @classmethod
     def mgmt_nw_id(cls):
@@ -245,23 +350,11 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
         return cls._mgmt_nw_uuid
 
     @classmethod
-    def svc_vm_mgr(cls):
-        if cls._svc_vm_mgr is None:
-            auth_url = (cfg.CONF.keystone_authtoken.auth_protocol + "://" +
-                        cfg.CONF.keystone_authtoken.auth_host + ":" +
-                        str(cfg.CONF.keystone_authtoken.auth_port) + "/v2.0")
-            username = cfg.CONF.keystone_authtoken.admin_user
-            pw = cfg.CONF.keystone_authtoken.admin_password
-            tenant = cfg.CONF.l3_admin_tenant
-            cls._svc_vm_mgr = service_vm_lib.ServiceVMManager(
-                user=username, passwd=pw, l3_admin_tenant=tenant,
-                auth_url=auth_url)
-        return cls._svc_vm_mgr
-
-    @classmethod
     def csr_mgmt_sec_grp_id(cls):
+        if cls._plugin == cl3_const.N1KV_PLUGIN:
+            return None
         if cls._csr_mgmt_sec_grp_id is None:
-            #Get the id for the csr_mgmt_security_group_id
+            # Get the id for the csr_mgmt_security_group_id
             tenant_id = cls.l3_tenant_id()
             res = manager.QuantumManager.get_plugin().get_security_groups(
                 q_context.get_admin_context(),
@@ -313,20 +406,26 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
         if o_r_db.gw_port is None:
             old_ext_gw = ''
             trunk_network_id = None
+            old_port_target_type = ''
         else:
             old_ext_gw = o_r_db.gw_port.network_id
             trunk_network_id = self._get_trunk_network_id(context,
                                                           o_r_db.gw_port)
-        ext_gateway_changed = (False if (old_ext_gw == new_ext_gw or
-                                         r.get(l3_db.EXTERNAL_GW_INFO) is None)
-                               else True)
+            old_port_target_type = self._get_port_target_type(or_r_db.gw_port)
+        #TODO(bobmel): Check if 'is None' test is really needed
+        ext_gateway_changed = (
+            False if (old_ext_gw == new_ext_gw or
+                      r.get(l3_db.EXTERNAL_GW_INFO) is None)
+            else True)
         router_updated = (
             super(L3_router_appliance_db_mixin, self).update_router(context,
                                                                     id,
                                                                     router))
+        gw_change_status = {'changed': ext_gateway_changed,
+                            'old_port_target_type': old_port_target_type,
+                            'old_trunk_nw_id': trunk_network_id}
         routers = self.get_sync_data_ext(context.elevated(), [o_r_db['id']],
-                                         ext_gw_changed=ext_gateway_changed,
-                                         gw_trunk_network_id=trunk_network_id)
+                                         ext_gw_change_status=gw_change_status)
         l3_rpc_joint_agent_api.L3JointAgentNotify.routers_updated(context,
                                                                   routers)
         return router_updated
@@ -334,8 +433,7 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
     def delete_router(self, context, id):
         # Collect info needed after parent has deleted router
         r_he_b = self.get_router_binding_info(context, id)
-        router = self._make_router_dict(r_he_b.router,
-                                        process_extensions=False)
+        router = self._make_router_dict(r_he_b.router)
         self._add_type_and_hosting_info(context, router,
                                         binding_info=r_he_b,
                                         schedule=False)
@@ -360,7 +458,7 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
         info = (super(L3_router_appliance_db_mixin, self).
                 add_router_interface(context, router_id, interface_info))
         routers = self.get_sync_data_ext(context.elevated(), [router_id],
-                                     interfaces_changed=True)
+                                         interfaces_changed=True)
         new_port_db = self._get_port(context, info['port_id'])
         l3_rpc_joint_agent_api.L3JointAgentNotify.routers_updated(
             context, routers, 'add_router_interface',
@@ -375,8 +473,10 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
         if 'port_id' in interface_info:
             port_db = self._get_port(context, interface_info['port_id'])
             net_id = port_db['network_id']
+            subnet_id = port_db['fixed_ips']['subnet_id']
         elif 'subnet_id' in interface_info:
             subnet_db = self._get_subnet(context, interface_info['subnet_id'])
+            subnet_id = subnet_db['id']
             port_db = self._get_router_port_db_on_subnet(context, router_id,
                                                          subnet_db)
             net_id = subnet_db['network_id']
@@ -394,7 +494,7 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
         l3_rpc_joint_agent_api.L3JointAgentNotify.routers_updated(
             context, routers, 'remove_router_interface',
             {'network_id': net_id,
-             'subnet_id': info['subnet_id']})
+             'subnet_id': subnet_id})
         return info
 
     def create_floatingip(self, context, floatingip):
@@ -473,15 +573,22 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
             # These resources are owned by the L3AdminTenant
             birth_date = timeutils.utcnow()
             for i in xrange(0, num):
+                #TODO(bobmel): Make service VM resources creation plugin aware
                 mgmt_port, t1_n, t1_sub, t1_p, t2_n, t2_sub, t2_p = (
                     svm.create_service_vm_resources(
+                        self._plugin,
                         self.mgmt_nw_id(),
                         self.csr_mgmt_sec_grp_id(),
                         self.l3_tenant_id(),
-                        cfg.CONF.max_routers_per_csr1kv))
+                        cfg.CONF.max_routers_per_csr1kv,
+                        mgmt_p_p_id=self.n1kv_mgmt_pp_id(),
+                        t1_p_p_id=self.n1kv_t1_pp_id(),
+                        t2_p_p_id=self.n1kv_t2_pp_id(),
+                        t1_n_p_id=self.n1kv_t1_np_id(),
+                        t2_n_p_id=self.n1kv_t2_np_id()))
                 if mgmt_port is None:
-                     # Required ports could not be created
-                     return hosting_entities
+                    # Required ports could not be created
+                    return hosting_entities
                 #Zip and flatten the two port list together
                 ports = [x for t in zip(t1_p, t2_p) for x in t]
                 pdb.set_trace()
@@ -507,7 +614,8 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
                 else:
                     # Fundamental error like could not contact Nova
                     # Cleanup anything we created
-                    svm.cleanup_for_service_vm(mgmt_port, t1_n, t1_sub, t1_p,
+                    svm.cleanup_for_service_vm(self._plugin, mgmt_port,
+                                               t1_n, t1_sub, t1_p,
                                                t2_n, t2_sub, t2_p)
                     return hosting_entities
         return hosting_entities
@@ -602,8 +710,7 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
             query = query.filter(
                 RouterHostingEntityBinding.router_id == router_id)
         for r_he_binding in query:
-            router = self._make_router_dict(r_he_binding.router,
-                                            process_extensions=False)
+            router = self._make_router_dict(r_he_binding.router)
             router['router_type'] = r_he_binding['router_type']
             router['share_host'] = r_he_binding['share_hosting_entity']
             self.hosting_scheduler.schedule_router_on_hosting_entity(
@@ -614,7 +721,7 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
         return []
 
     def get_sync_data_ext(self, context, router_ids=None, active=None,
-                          ext_gw_changed=False, gw_trunk_network_id=None,
+                          ext_gw_change_status=None,
                           interfaces_changed=False, int_trunk_network_id=None):
         """Query routers and their related floating_ips, interfaces.
         Adds information about hosting entity as well as trunking.
@@ -624,12 +731,14 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
         for r in sync_data:
             self._add_type_and_hosting_info(context, r)
             host_type = (r.get('hosting_entity') or {}).get('host_type', '')
-            if host_type == cl3_const.CSR1KV_HOST:
-                self._populate_port_trunk_info(
-                    context, r, update_gw_trunk=ext_gw_changed,
-                    gw_trunk_network_id=gw_trunk_network_id,
-                    update_internal_trunk=interfaces_changed,
-                    int_trunk_network_id=int_trunk_network_id)
+            #TODO(bobmel): Vif management needs further modularization
+            #TODO(bobmel): to support non-trunk case etc.
+            if self._plugin in [cl3_const.N1KV_PLUGIN, cl3_const.OVS_PLUGIN]:
+                if host_type == cl3_const.CSR1KV_HOST:
+                    self._populate_port_trunk_info(
+                        context, r, ext_gw_change_status=ext_gw_change_status,
+                        update_internal_trunk=interfaces_changed,
+                        int_trunk_network_id=int_trunk_network_id)
         return sync_data
 
     def _add_type_and_hosting_info(self, context, router, binding_info=None,
@@ -660,9 +769,16 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
                 'port': binding_info.hosting_entity.transport_port,
                 'created_at': str(binding_info.hosting_entity.created_at)}
 
+    def _get_port_target_type(self, port_db):
+        if (self._plugin == cl3_const.N1KV_PLUGIN and
+                port_db[n1kv_profile.PROFILE_ID] == self.n1kv_t2_np_id()):
+            return cl3_const.T2_PORT_NAME
+        else:
+            return cl3_const.T1_PORT_NAME
+
     def _populate_port_trunk_info(self, context, router,
-                                  update_gw_trunk=False,
-                                  gw_trunk_network_id=None,
+                                  ext_gw_change_status=None,
+                                  int_if_change_status=None,
                                   update_internal_trunk=False,
                                   int_trunk_network_id=None):
         """Populate router ports with with trunking information.
@@ -674,55 +790,75 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
         # We only populate trunk info, i.e., reach here, if the
         # router has been scheduled to a hosting entity. Hence this
         # a good place to allocate hosting ports to the router ports.
+        if ext_gw_change_status is None:
+            ext_gw_change_status = {}
+        if int_if_change_status is None:
+            int_if_change_status = {}
+        trunk_data = {
+            cl3_const.T1_PORT_NAME: {
+                'update': False, 'network_id': None,'mappings': {}},
+            cl3_const.T2_PORT_NAME: {
+                'update': False, 'network_id': None, 'mappings': {}}}
         tr_info = None
         did_allocation = False
-        if router['gw_port_id'] is not None:
+        hosting_pdata = {cl3_const.T1_PORT_NAME: {'mac': None, 'name': None},
+                         cl3_const.T2_PORT_NAME: {'mac': None, 'name': None}}
+        if router['gw_port_id'] is None:
+            port_target_type = None
+        else:
+            port_target_type = self._get_port_target_type(router['gw_port'])
             tr_info, did_allocation = self._populate_trunk_for_port(
                 context, router['gw_port'], router['hosting_entity']['id'],
-                router['id'], cl3_const.T2_PORT_NAME,
-                l3_db.DEVICE_OWNER_ROUTER_GW)
-        if update_gw_trunk and not did_allocation:
-            # If allocation of vlan tag for gateway port happened then
-            # trunking was done as part of that so no need to do it here.
-            trunk_network_id = (gw_trunk_network_id if tr_info is None
-                                else tr_info.hosting_port['network_id'])
-            if trunk_network_id is not None:
-                trunk_mappings = ({} if router['gw_port_id'] is None
-                                  or tr_info is None
-                                  else {router['gw_port']['network_id']:
-                                        tr_info.segmentation_tag})
-                self._update_trunking_on_hosting_port(
-                    context, trunk_network_id, trunk_mappings)
-        hosting_mac = None
-        hosting_port_name = None
-        tr_info = None
+                router['id'], port_target_type,
+                l3_db.DEVICE_OWNER_ROUTER_GW, hosting_pdata[port_target_type])
+        if ext_gw_change_status.get('changed', False):
+            old_p_t_type = ext_gw_change_status['old_port_target_type']
+            if (ext_gw_change_status['old_trunk_nw_id'] is not None and
+                    port_target_type != old_p_t_type):
+                # Gateway network has been removed or has changed type
+                # so we must remove old trunking. All we need to do is
+                # to set the update flag as mappings are already empty.
+                trunk_data[old_p_t_type]['update'] = True
+            if tr_info is not None:
+                trunk_data[port_target_type]['mappings'] = (
+                    {router['gw_port']['network_id']:
+                        tr_info.segmentation_tag})
+                if port_target_type == cl3_const.T1_PORT_NAME:
+                    # Only vxlan trunk must be explicitly updated since
+                    # vlan trunk is updated during allocation.
+                    trunk_data[port_target_type]['update'] = True
         for itfc in router.get(l3_constants.INTERFACE_KEY, []):
+            port_target_type = self._get_port_target_type(itfc)
             tr_info, did_allocation = self._populate_trunk_for_port(
                 context, itfc, router['hosting_entity']['id'],
-                router['id'], cl3_const.T1_PORT_NAME,
-                l3_db.DEVICE_OWNER_ROUTER_INTF, hosting_mac, hosting_port_name)
+                router['id'], port_target_type,
+                l3_db.DEVICE_OWNER_ROUTER_INTF,
+                hosting_pdata[port_target_type])
+            #TODO(bobmel): the line below is probably still ok but must check
             update_internal_trunk |= did_allocation
-            if hosting_mac is None and tr_info is not None:
-                # All itfc have same hosting interface so this avoids lookups
-                hosting_mac = itfc['trunk_info']['hosting_mac']
-                hosting_port_name = itfc['trunk_info']['hosting_port_name']
-        if update_internal_trunk:
-            # The router has been attached to or detached from a subnet
-            # so we need to update the vlan trunking on the hosting port.
-            # For internal ports trunking does not happen as part of
-            # allocation of vlan tag so it must always be done here.
-            trunk_network_id = (int_trunk_network_id if tr_info is None
-                               else tr_info.hosting_port['network_id'])
-            if trunk_network_id is not None:
-                trunk_mappings = self._build_trunk_mapping(
-                    context, router['id'], l3_db.DEVICE_OWNER_ROUTER_INTF)
-                self._update_trunking_on_hosting_port(context, trunk_network_id,
-                                                      trunk_mappings)
+            if tr_info and port_target_type == cl3_const.T1_PORT_NAME:
+                # Only vxlan trunk must be explicitly updated since
+                # vlan trunk is updated during allocation.
+                trunk_data[port_target_type]['update'] = True
+            trunk_data[port_target_type]['update'] |= did_allocation
+            if (hosting_pdata[port_target_type]['mac'] is None and
+                    tr_info is not None):
+                hosting_pdata[port_target_type] = {
+                    'mac': itfc['trunk_info']['hosting_mac'],
+                    'name': itfc['trunk_info']['hosting_port_name']}
+        for td in trunk_data.values():
+            if td['update']:
+                self._extend_trunk_mapping(
+                    context, router['id'], device_owner=None,
+                    hosting_port_id=5,
+                    mapping=td['mappings'])
+                self._update_trunking_on_hosting_port(context,
+                                                      td['network_id'],
+                                                      td['mappings'])
 
     def _populate_trunk_for_port(self, context, port, hosting_entity_id,
                                  router_id, trunk_port_name, device_owner,
-                                 hosting_port_mac=None,
-                                 hosting_port_name = None):
+                                 hosting_pdata):
         port_db = self._get_port(context, port['id'])
         tr_info = port_db.trunk_info
         new_allocation = False
@@ -740,16 +876,16 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
                 return None, new_allocation
             else:
                 new_allocation = True
-        if hosting_port_mac is None:
+        if hosting_pdata.get('mac') is None:
             p_data = self.get_port(context, tr_info.hosting_port_id,
                                    ['mac_address', 'name'])
-            hosting_port_mac = p_data['mac_address']
-            hosting_port_name = p_data['name']
+            hosting_pdata['mac'] = p_data['mac_address']
+            hosting_pdata['name'] = p_data['name']
         # Including MAC address of hosting port so L3CfgAgent can easily
         # determine which VM VIF to configure VLAN sub-interface on.
         port['trunk_info'] = {'hosting_port_id': tr_info.hosting_port_id,
-                              'hosting_mac': hosting_port_mac,
-                              'hosting_port_name': hosting_port_name,
+                              'hosting_mac': hosting_pdata.get('mac'),
+                              'hosting_port_name': hosting_pdata.get('name'),
                               'segmentation_id': tr_info.segmentation_tag}
         return tr_info, new_allocation
 
@@ -767,7 +903,8 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
             return
 
     def _get_router_ports_with_trunkinfo_qry(self, context, router_id,
-                                               device_owner=None):
+                                             device_owner=None,
+                                             hosting_port_id=None):
         # Query for a router's ports that have trunking information
         query = context.session.query(models_v2.Port)
         query = query.join(TrunkInfo,
@@ -775,13 +912,43 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
         query = query.filter(models_v2.Port.device_id == router_id)
         if device_owner is not None:
             query = query.filter(models_v2.Port.device_owner == device_owner)
+        if hosting_port_id is not None:
+            query = query.filter(
+                TrunkInfo.hosting_port_id == hosting_port_id)
         return query
 
     def _update_trunking_on_hosting_port(self, context, trunk_network_id,
                                          trunk_mappings):
-        network_dict = {'network': {TRUNKED_NETWORKS: trunk_mappings}}
-        net = self.update_network(context, trunk_network_id, network_dict)
-        return net.get(TRUNKED_NETWORKS)
+        if self._plugin == cl3_const.N1KV_PLUGIN:
+            np_id_t_nw = self.get_network(context, trunk_network_id,
+                                          [n1kv_profile.PROFILE_ID,
+                                           n1kv_profile.MEMBER_SEGMENTS])
+            if np_id_t_nw.get(n1kv_profile.PROFILE_ID) == self.n1kv_t1_np_id():
+                # for vxlan trunked segment, id:s end with link local vlan tag
+                nets_to_trunk = set([k + '-' + str(v)
+                                     for k,v in trunk_mappings.items()])
+            else:
+                # not so for vlan trunked segments
+                nets_to_trunk = trunk_mappings.keys()
+                n_id_tags = self.get_networks(
+                    context, {'id': nets_to_trunk},
+                    ['id', 'provider:segmentation_id'])
+                nets_to_trunk = set(nets_to_trunk)
+                # fill in actual VLAN tags that are used
+                for info in n_id_tags:
+                    trunk_mappings[info['id']] = info[pr_net.SEGMENTATION_ID]
+            curr_trunks = set(np_id_t_nw[n1kv_profile.MEMBER_SEGMENTS])
+            trunks_to_add = nets_to_trunk - curr_trunks
+            trunks_to_del = curr_trunks - nets_to_trunk
+            network_dict = {'network': {
+                n1kv_profile.SEGMENT_ADD: list(trunks_to_add),
+                n1kv_profile.SEGMENT_DEL: list(trunks_to_del)}}
+            self.update_network(context, trunk_network_id, network_dict)
+            return trunk_mappings
+        else:
+            network_dict = {'network': {TRUNKED_NETWORKS: trunk_mappings}}
+            net = self.update_network(context, trunk_network_id, network_dict)
+            return net.get(TRUNKED_NETWORKS)
 
     def _get_trunk_network_id(self, context, port_db):
         if port_db and port_db.trunk_info and port_db.trunk_info.hosting_port:
@@ -789,12 +956,12 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
         else:
             return
 
-    def _build_trunk_mapping(self, context, router_id, device_owner):
+    def _extend_trunk_mapping(self, context, router_id, device_owner,
+                              hosting_port_id, mapping):
         query = self._get_router_ports_with_trunkinfo_qry(
-            context, router_id, device_owner)
-        res = {port['network_id']: port.trunk_info.segmentation_tag
-               for port in query}
-        return res
+            context, router_id, device_owner, hosting_port_id)
+        for port in query:
+            mapping[port['network_id']] = port.trunk_info.segmentation_tag
 
     def _allocate_hosting_port(self, context, port_db, hosting_entity_id,
                                router_id, trunk_port_name, device_owner):

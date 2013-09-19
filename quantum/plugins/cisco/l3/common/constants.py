@@ -16,13 +16,21 @@
 #
 # @author: Bob Melander, Cisco Systems, Inc.
 
+N1KV_PLUGIN = 1
+OVS_PLUGIN = 2
+ML2_PLUGIN = 3
+
+# T1 port/network is for VXLAN
 T1_PORT_NAME = 't1:'
+# T2 port/network is for VLAN
 T2_PORT_NAME = 't2:'
 T1_NETWORK_NAME = 't1_n:'
 T2_NETWORK_NAME = 't2_n:'
 T1_SUBNET_NAME = 't1_subnet:'
 T2_SUBNET_NAME = 't2_subnet:'
 
+# These prefix defines will go away when Nova allows spinning up
+# VMs with vifs on networks without subnet(s).
 SUB_PREFX = '172.16.1.0/24'
 
 T1_SUBNET_START_PREFX = '172.16.'

@@ -1,4 +1,4 @@
-#!/bin/bash
+q#!/bin/bash
 
 # Default values
 # --------------
@@ -20,7 +20,7 @@ osnMgmtSubnetName=osn_mgmt_subnet
 # note that the size of this network sets the limit on number of CSR instances
 osnMgmtNw=10.0.100.0
 osnMgmtNwLen=24
-osnMgmtSubnet=osnMgmtNw/osnMgmtNwLen
+osnMgmtSubnet=$osnMgmtNw/$osnMgmtNwLen
 # the first 9 addresses are set aside for L3CfgAgents and similar
 osnMgmtRangeStart=10.0.100.10
 osnMgmtRangeEnd=10.0.100.254

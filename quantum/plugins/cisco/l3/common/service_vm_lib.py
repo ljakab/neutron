@@ -71,14 +71,15 @@ class ServiceVMManager:
         return res
 
     def delete_service_vm(self, id, mgmt_nw_id, delete_networks=False):
-        nets_to_delete = []
+        to_delete = []
         if delete_networks:
             ports = self._core_plugin.get_ports(self._context,
                                                 filters={'device_id': [id]})
 
             for port in ports:
                 if port['network_id'] != mgmt_nw_id:
-                    nets_to_delete.append(port['network_id'])
+                    to_delete.append({'subnet': port['fixed_ips']['subnet_id'],
+                                      'net': port['network_id']})
         result = True
         try:
             self._nclient.servers.delete(id)
@@ -90,15 +91,31 @@ class ServiceVMManager:
             LOG.error(_('Failed to delete service VM instance %(id)s, '
                         'due to %(err)s'), {'id': id, 'err': e})
             result = False
-        for net in nets_to_delete:
+        for ids in to_delete:
             try:
-                self._core_plugin.delete_network(self._context, net)
+                # N1kv plugin requires that subnet is deleted first
+                self._core_plugin.delete_subnet(self._context, ids['subnet'])
+            except q_exc.QuantumException as e:
+                LOG.error(_('Failed to delete subnet %(subnet_id)s for '
+                            'service VM %(vm_id) due to %(err)s'),
+                          {'subnet_id': ids['subnet'], 'vm_id': id, 'err': e})
+            try:
+                self._core_plugin.delete_network(self._context, ids['net'])
             except q_exc.QuantumException as e:
                 LOG.error(_('Failed to delete network %(net_id)s for service '
-                            'VM %(vm_id) due to %(err)s'), {'net_id': net,
-                                                            'vm_id': id,
-                                                            'err': e})
+                            'VM %(vm_id) due to %(err)s'),
+                          {'net_id': ids['net'], 'vm_id': id, 'err': e})
         return result
+
+    def cleanup_for_service_vm(self, plugin, mgmt_port, t1_n, t1_sub, t1_p,
+                               t2_n, t2_sub, t2_p):
+        if plugin == constants.N1KV_PLUGIN:
+            self.cleanup_for_service_vm_n1kv(mgmt_port,
+                                             t1_n, t1_sub, t1_p,
+                                             t2_n, t2_sub, t2_p)
+        else:
+            self.cleanup_for_service_vm_ovs(mgmt_port, t1_n, t1_sub, t1_p,
+                                            t2_n, t2_sub, t2_p)
 
     def cleanup_for_service_vm_n1kv(self, mgmt_port, t1_n, t1_sub, t1_p,
                                     t2_n, t2_sub, t2_p):
@@ -132,8 +149,8 @@ class ServiceVMManager:
                             'service vm due to %(err)s'),
                           {'net_id': item['id'], 'err': e})
 
-    def cleanup_for_service_vm(self, mgmt_port, t1_n, t1_sub, t1_p,
-                               t2_n, t2_sub, t2_p):
+    def cleanup_for_service_vm_ovs(self, mgmt_port, t1_n, t1_sub, t1_p,
+                                   t2_n, t2_sub, t2_p):
          # Remove anything created.
         if mgmt_port is not None:
             try:
@@ -164,8 +181,126 @@ class ServiceVMManager:
                             'service vm due to %(err)s'),
                           {'net_id': item['id'], 'err': e})
 
-    def create_service_vm_resources_n1kv(self, mgmt_nw_id, csr_mgmt_sec_grp_id,
-                                         tenant_id, max_hosted):
+    def create_service_vm_resources(self, plugin, mgmt_nw_id, mgmt_sec_grp_id,
+                                    tenant_id, max_hosted, **kwargs):
+        if plugin == constants.N1KV_PLUGIN:
+            return self.create_service_vm_resources_n1kv(
+                mgmt_nw_id, mgmt_sec_grp_id, tenant_id, max_hosted, **kwargs)
+        else:
+            return self.create_service_vm_resources_ovs(
+                mgmt_nw_id, mgmt_sec_grp_id, tenant_id, max_hosted)
+
+    def create_service_vm_resources_n1kv(self, mgmt_nw_id, mgmt_sec_grp_id,
+                                         tenant_id, max_hosted, **kwargs):
+        mgmt_port = None
+        t1_n, t1_p, t2_n, t2_p = [], [], [], []
+        t1_sub, t2_sub = [], []
+        if mgmt_nw_id is not None and tenant_id is not None:
+            # Create port for mgmt interface
+            p_spec = {'port': {
+                'tenant_id': tenant_id,
+                'admin_state_up': True,
+                'name': 'mgmt',
+                'network_id': mgmt_nw_id,
+                'mac_address': attributes.ATTR_NOT_SPECIFIED,
+                'fixed_ips': attributes.ATTR_NOT_SPECIFIED,
+                'n1kv:profile_id': kwargs.get('mgmt_p_p_id', {}).get('id'),
+                'device_id': "",
+                'device_owner': ""}}
+            try:
+                mgmt_port = self._core_plugin.create_port(self._context,
+                                                          p_spec)
+                # The trunk networks
+                n_spec = {'network': {'tenant_id': tenant_id,
+                                      'admin_state_up': True,
+                                      'name': constants.T1_NETWORK_NAME,
+                                      'shared': False}}
+                # Until Nova allows spinning up VMs with VIFs on
+                # networks without subnet(s) we create "dummy" subnets
+                # for the trunk networks
+                sub_spec = {'subnet': {
+                    'tenant_id': tenant_id,
+                    'admin_state_up': True,
+                    'cidr': constants.SUB_PREFX,
+                    'enable_dhcp': False,
+                    'gateway_ip': attributes.ATTR_NOT_SPECIFIED,
+                    'allocation_pools': attributes.ATTR_NOT_SPECIFIED,
+                    'ip_version': 4,
+                    'dns_nameservers': attributes.ATTR_NOT_SPECIFIED,
+                    'host_routes': attributes.ATTR_NOT_SPECIFIED}}
+                for i in xrange(0, max_hosted):
+                    # Create T1 trunk network for this router
+                    indx = str(i + 1)
+                    n_spec['network'].update(
+                        {'name': constants.T1_NETWORK_NAME + indx,
+                         'n1kv:profile_id': kwargs.get('t1_n_p_id',
+                                                       {}).get('id')})
+                    t1_n.append(self._core_plugin.create_network(
+                        self._context, n_spec))
+                    LOG.debug(_('Created T1 network with name %(name)s and '
+                                'id %(id)s'),
+                              {'name': constants.T1_NETWORK_NAME + indx,
+                               'id': t1_n[i]['id']})
+                    # Create dummy subnet for this trunk network
+                    sub_spec['subnet'].update(
+                        {'name': constants.T1_SUBNET_NAME + indx,
+                         'network_id': t1_n[i]['id']})
+                    t1_sub.append(self._core_plugin.create_subnet(self._context,
+                                                                  sub_spec))
+                    # Create T1 port for this router
+                    p_spec['port'].update(
+                        {'name': constants.T1_PORT_NAME + indx,
+                         'network_id': t1_n[i]['id'],
+                         'n1kv:profile_id': kwargs.get('t1_p_p_id',
+                                                       {}).get('id')})
+                    t1_p.append(self._core_plugin.create_port(self._context,
+                                                              p_spec))
+                    LOG.debug(_('Created T1 port with name %(name)s,  '
+                                'id %(id)s and subnet %(subnet)s'),
+                              {'name': t1_n[i]['name'],
+                               'id': t1_n[i]['id'],
+                               'subnet': t1_sub[i]['id']})
+                    # Create T2 trunk network for this router
+                    n_spec['network'].update(
+                        {'name': constants.T2_NETWORK_NAME + indx,
+                         'n1kv:profile_id': kwargs.get('t2_n_p_id',
+                                                       {}).get('id')})
+                    t2_n.append(self._core_plugin.create_network(self._context,
+                                                                 n_spec))
+                    LOG.debug(_('Created T2 network with name %(name)s and '
+                                'id %(id)s'),
+                              {'name': constants.T2_NETWORK_NAME + indx,
+                               'id': t2_n[i]['id']})
+                    # Create dummy subnet for this trunk network
+                    sub_spec['subnet'].update(
+                        {'name': constants.T2_SUBNET_NAME + indx,
+                         'network_id': t2_n[i]['id']})
+                    t2_sub.append(self._core_plugin.create_subnet(self._context,
+                                                                  sub_spec))
+                    # Create T2 port for this router
+                    p_spec['port'].update(
+                        {'name': constants.T2_PORT_NAME + indx,
+                         'network_id': t2_n[i]['id'],
+                         'n1kv:profile_id': kwargs.get('t2_p_p_id',
+                                                       {}).get('id')})
+                    t2_p.append(self._core_plugin.create_port(self._context,
+                                                              p_spec))
+                    LOG.debug(_('Created T2 port with name %(name)s,  '
+                                'id %(id)s and subnet %(subnet)s'),
+                              {'name': t2_n[i]['name'],
+                               'id': t2_n[i]['id'],
+                               'subnet': t2_sub[i]['id']})
+            except q_exc.QuantumException as e:
+                LOG.error(_('Error %s when creating service VM resources. '
+                            'Cleaning up.'), e)
+                self.cleanup_for_service_vm_n1kv(mgmt_port, t1_n, t1_sub, t1_p,
+                                                 t2_n, t2_sub, t2_p)
+                mgmt_port = None
+                t1_n, t1_p, t2_n, t2_p = [], [], [], []
+        return mgmt_port, t1_n, t1_sub, t1_p, t2_n, t2_sub, t2_p
+
+    def create_service_vm_resources_ovs(self, mgmt_nw_id, csr_mgmt_sec_grp_id,
+                                        tenant_id, max_hosted):
         mgmt_port = None
         t1_n, t1_p, t2_n, t2_p = [], [], [], []
         t1_sub, t2_sub = [], []
@@ -191,42 +326,41 @@ class ServiceVMManager:
                                       'name': constants.T1_NETWORK_NAME,
                                       'shared': False,
                                       'trunkport:trunked_networks': {}}}
+                # Until Nova allows spinning up VMs with vifs on networks without
+                # subnet(s) we create "dummy" subnets for the trunk networks
+                sub_spec = {'subnet': {'tenant_id': tenant_id,
+                                       'admin_state_up': True,
+                                       'cidr': constants.SUB_PREFX,
+                                       'enable_dhcp': False,
+                                       'gateway_ip': attributes.ATTR_NOT_SPECIFIED,
+                                       'allocation_pools': attributes.ATTR_NOT_SPECIFIED,
+                                       'ip_version': 4,
+                                       'dns_nameservers': attributes.ATTR_NOT_SPECIFIED,
+                                       'host_routes': attributes.ATTR_NOT_SPECIFIED
+                                       }
+                            }
                 for i in xrange(0, max_hosted):
                     # Create T1 trunk network for this router
                     indx = str(i + 1)
-                    n_spec['network']['name'] = (constants.T1_NETWORK_NAME +
-                                                 indx)
+                    n_spec['network'].update(
+                        {'name':constants.T1_NETWORK_NAME + indx})
                     t1_n.append(self._core_plugin.create_network(
                         self._context, n_spec))
                     LOG.debug(_('Created T1 network with name %(name)s and '
                                 'id %(id)s'),
                               {'name': constants.T1_NETWORK_NAME + indx,
                                'id': t1_n[i]['id']})
-                    #Create a subnet on this network
-                    sub_spec = {'subnet': {'tenant_id': tenant_id,
-                                           'admin_state_up': True,
-                                           'name': constants.T1_SUBNET_NAME + indx,
-                                           'network_id': t1_n[i]['id'],
-                                           'cidr': constants.SUB_PREFX,
-                                           'enable_dhcp': False,
-                                           'gateway_ip': attributes.ATTR_NOT_SPECIFIED,
-                                           'allocation_pools': attributes.ATTR_NOT_SPECIFIED,
-                                           'ip_version': 4,
-                                           'dns_nameservers': attributes.ATTR_NOT_SPECIFIED,
-                                           'host_routes': attributes.ATTR_NOT_SPECIFIED
-                                           }
-                                }
                     #pdb.set_trace()
+                    sub_spec['subnet'].update(
+                        {'name': constants.T1_SUBNET_NAME + indx,
+                         'network_id': t1_n[i]['id']})
                     t1_sub.append(self._core_plugin.create_subnet(self._context,
                                                                   sub_spec))
                     # Create T1 port for this router
-                    p_spec['port']['name'] = constants.T1_PORT_NAME + indx
-                    p_spec['port']['network_id'] = t1_n[i]['id']
-                    p_spec['port']['fixed_ips'] = [
-                        {
-                            "subnet_id": t1_sub[i]['id'],
-                        }
-                    ]
+                    p_spec['port'].update(
+                        {'name': constants.T1_PORT_NAME + indx,
+                         'network_id': t1_n[i]['id'],
+                         'fixed_ips': [{'subnet_id': t1_sub[i]['id']}]})
                     t1_p.append(self._core_plugin.create_port(self._context,
                                                               p_spec))
                     LOG.debug(_('Created T1 port with name %(name)s,  '
@@ -235,29 +369,27 @@ class ServiceVMManager:
                                'id': t1_n[i]['id'],
                                'subnet': t1_sub[i]['id']})
                     # Create T2 trunk network for this router
-                    n_spec['network']['name'] = (constants.T2_NETWORK_NAME +
-                                                 indx)
+                    n_spec['network'].update(
+                        {'name': constants.T2_NETWORK_NAME + indx})
                     t2_n.append(self._core_plugin.create_network(self._context,
                                                                  n_spec))
                     LOG.debug(_('Created T2 network with name %(name)s and '
                                 'id %(id)s'),
                               {'name': constants.T2_NETWORK_NAME + indx,
                                'id': t2_n[i]['id']})
-                    # Create subnet on this trunk
-                    sub_spec['subnet']['name'] = constants.T2_SUBNET_NAME + indx
-                    sub_spec['subnet']['network_id'] = t2_n[i]['id']
+                    # Create dummy subnet for this trunk network
+                    sub_spec['subnet'].update(
+                        {'name': constants.T2_SUBNET_NAME + indx,
+                         'network_id': t2_n[i]['id']})
                     #pdb.set_trace()
                     t2_sub.append(self._core_plugin.create_subnet(self._context,
                                                                   sub_spec))
 
                     # Create T2 port for this router
-                    p_spec['port']['name'] = constants.T2_PORT_NAME + indx
-                    p_spec['port']['network_id'] = t2_n[i]['id']
-                    p_spec['port']['fixed_ips'] = [
-                        {
-                            "subnet_id": t2_sub[i]['id'],
-                        }
-                    ]
+                    p_spec['port'].update(
+                        {'name': constants.T2_PORT_NAME + indx,
+                         'network_id': t2_n[i]['id'],
+                         'fixed_ips': [{'subnet_id': t2_sub[i]['id']}]})
                     t2_p.append(self._core_plugin.create_port(self._context,
                                                               p_spec))
                     LOG.debug(_('Created T2 port with name %(name)s,  '
@@ -266,117 +398,11 @@ class ServiceVMManager:
                                'id': t2_n[i]['id'],
                                'subnet': t2_sub[i]['id']})
             except q_exc.QuantumException:
-                self.cleanup_for_service_vm(mgmt_port, t1_n, t2_n, t1_p, t2_p)
+                self.cleanup_for_service_vm_ovs(mgmt_port, t1_n, t1_sub, t1_p,
+                                                t2_n, t2_sub, t2_p)
                 mgmt_port = None
                 t1_n, t1_p, t2_n, t2_p = [], [], [], []
-        return (mgmt_port, t1_n, t1_sub, t1_p, t2_n, t2_sub, t2_p)
-
-    def create_service_vm_resources(self, mgmt_nw_id, csr_mgmt_sec_grp_id,
-                                    tenant_id, max_hosted):
-        mgmt_port = None
-        t1_n, t1_p, t2_n, t2_p = [], [], [], []
-        t1_sub, t2_sub = [], []
-        if mgmt_nw_id is not None and tenant_id is not None:
-            # Create port for mgmt interface
-            p_spec = {'port': {'tenant_id': tenant_id,
-                               'admin_state_up': True,
-                               'name': 'mgmt',
-                               'network_id': mgmt_nw_id,
-                               'mac_address': attributes.ATTR_NOT_SPECIFIED,
-                               'fixed_ips': attributes.ATTR_NOT_SPECIFIED,
-                               'security_groups': [csr_mgmt_sec_grp_id],
-                               'device_id': "",
-                               'device_owner': ""}}
-            try:
-                mgmt_port = self._core_plugin.create_port(self._context, p_spec)
-                # No security groups on the trunk ports since
-                # they have no IP address
-                p_spec['port']['security_groups'] = []
-                # The trunk networks
-                n_spec = {'network': {'tenant_id': tenant_id,
-                                      'admin_state_up': True,
-                                      'name': constants.T1_NETWORK_NAME,
-                                      'shared': False,
-                                      'trunkport:trunked_networks': {}}}
-                for i in xrange(0, max_hosted):
-                    # Create T1 trunk network for this router
-                    indx = str(i + 1)
-                    n_spec['network']['name'] = (constants.T1_NETWORK_NAME +
-                                                 indx)
-                    t1_n.append(self._core_plugin.create_network(
-                        self._context, n_spec))
-                    LOG.debug(_('Created T1 network with name %(name)s and '
-                                'id %(id)s'),
-                              {'name': constants.T1_NETWORK_NAME + indx,
-                               'id': t1_n[i]['id']})
-                    #Create a subnet on this network
-                    sub_spec = {'subnet': {'tenant_id': tenant_id,
-                                           'admin_state_up': True,
-                                           'name': constants.T1_SUBNET_NAME + indx,
-                                           'network_id': t1_n[i]['id'],
-                                           'cidr': constants.SUB_PREFX,
-                                           'enable_dhcp': False,
-                                           'gateway_ip': attributes.ATTR_NOT_SPECIFIED,
-                                           'allocation_pools': attributes.ATTR_NOT_SPECIFIED,
-                                           'ip_version': 4,
-                                           'dns_nameservers': attributes.ATTR_NOT_SPECIFIED,
-                                           'host_routes': attributes.ATTR_NOT_SPECIFIED
-                                           }
-                                }
-                    #pdb.set_trace()
-                    t1_sub.append(self._core_plugin.create_subnet(self._context,
-                                                                  sub_spec))
-                    # Create T1 port for this router
-                    p_spec['port']['name'] = constants.T1_PORT_NAME + indx
-                    p_spec['port']['network_id'] = t1_n[i]['id']
-                    p_spec['port']['fixed_ips'] = [
-                        {
-                            "subnet_id": t1_sub[i]['id'],
-                        }
-                    ]
-                    t1_p.append(self._core_plugin.create_port(self._context,
-                                                              p_spec))
-                    LOG.debug(_('Created T1 port with name %(name)s,  '
-                                'id %(id)s and subnet %(subnet)s'),
-                              {'name': t1_n[i]['name'],
-                               'id': t1_n[i]['id'],
-                               'subnet': t1_sub[i]['id']})
-                    # Create T2 trunk network for this router
-                    n_spec['network']['name'] = (constants.T2_NETWORK_NAME +
-                                                 indx)
-                    t2_n.append(self._core_plugin.create_network(self._context,
-                                                                 n_spec))
-                    LOG.debug(_('Created T2 network with name %(name)s and '
-                                'id %(id)s'),
-                              {'name': constants.T2_NETWORK_NAME + indx,
-                               'id': t2_n[i]['id']})
-                    # Create subnet on this trunk
-                    sub_spec['subnet']['name'] = constants.T2_SUBNET_NAME + indx
-                    sub_spec['subnet']['network_id'] = t2_n[i]['id']
-                    #pdb.set_trace()
-                    t2_sub.append(self._core_plugin.create_subnet(self._context,
-                                                                  sub_spec))
-
-                    # Create T2 port for this router
-                    p_spec['port']['name'] = constants.T2_PORT_NAME + indx
-                    p_spec['port']['network_id'] = t2_n[i]['id']
-                    p_spec['port']['fixed_ips'] = [
-                        {
-                            "subnet_id": t2_sub[i]['id'],
-                        }
-                    ]
-                    t2_p.append(self._core_plugin.create_port(self._context,
-                                                              p_spec))
-                    LOG.debug(_('Created T2 port with name %(name)s,  '
-                                'id %(id)s and subnet %(subnet)s'),
-                              {'name': t2_n[i]['name'],
-                               'id': t2_n[i]['id'],
-                               'subnet': t2_sub[i]['id']})
-            except q_exc.QuantumException:
-                self.cleanup_for_service_vm(mgmt_port, t1_n, t2_n, t1_p, t2_p)
-                mgmt_port = None
-                t1_n, t1_p, t2_n, t2_p = [], [], [], []
-        return (mgmt_port, t1_n, t1_sub, t1_p, t2_n, t2_sub, t2_p)
+        return mgmt_port, t1_n, t1_sub, t1_p, t2_n, t2_sub, t2_p
 
     # TODO(bob-melander): Move this to fake_service_vm_lib.py file
     # with FakeServiceVMManager

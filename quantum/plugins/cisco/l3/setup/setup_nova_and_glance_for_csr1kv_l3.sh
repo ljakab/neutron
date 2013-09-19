@@ -2,7 +2,7 @@
 
 # Default values
 # --------------
-adminUser="admin"
+adminUser="quantum"
 l3AdminTenant="L3AdminTenant"
 csr1kvFlavorName="csr1kv_router"
 csr1kvFlavorId=621
@@ -25,7 +25,7 @@ if [ "$tenantId" == "No" ]; then
 fi
 
 
-source ~/devstack/openrc $adminUser $L3adminTenant
+source ~/devstack/openrc $adminUser $L3AdminTenant
 
 
 echo -n "Checking if $csr1kvFlavorName flavor exists ..."
