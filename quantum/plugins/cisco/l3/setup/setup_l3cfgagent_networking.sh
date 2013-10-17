@@ -5,7 +5,7 @@
 plugin=${1:-n1kv}
 #plugin=ovs
 
-adminUser=admin
+adminUser=quantum
 l3AdminTenant=L3AdminTenant
 
 osnMgmtNwName=osn_mgmt_nw
