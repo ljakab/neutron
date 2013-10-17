@@ -39,7 +39,6 @@ from quantum.db import agentschedulers_db
 from quantum.db import db_base_plugin_v2
 from quantum.db import dhcp_rpc_base
 from quantum.db import extraroute_db
-from quantum.db import l3_rpc_base
 from quantum.db import securitygroups_rpc_base as sg_db_rpc
 from quantum.extensions import portbindings
 from quantum.extensions import providernet
@@ -55,6 +54,7 @@ from quantum.plugins.cisco.common import config as c_conf
 from quantum.plugins.cisco.db import n1kv_db_v2
 from quantum.plugins.cisco.db import network_db_v2
 from quantum.plugins.cisco.extensions import n1kv_profile
+from quantum.plugins.cisco.l3.db import l3_cfg_rpc_base
 from quantum.plugins.cisco.n1kv import n1kv_client
 from quantum import policy
 
@@ -65,7 +65,7 @@ pool = eventlet.GreenPool(c_const.HTTP_POOL_SIZE)
 
 
 class N1kvRpcCallbacks(dhcp_rpc_base.DhcpRpcCallbackMixin,
-                       l3_rpc_base.L3RpcCallbackMixin,
+                       l3_cfg_rpc_base.L3CfgRpcCallbackMixin,
                        sg_db_rpc.SecurityGroupServerRpcCallbackMixin):
 
     """Class to handle agent RPC calls."""
