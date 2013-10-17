@@ -33,7 +33,7 @@ n1kvNwProfileNames=(osn_mgmt_np osn_t1_np osn_t2_np)
 n1kvNwProfileTypes=(vlan trunk trunk)
 #n1kvNwSubprofileTypes=(None vlan vxlan)
 n1kvNwSubprofileTypes=(None vlan vlan)
-n1kvNwProfileSegRange=($mgmtProviderVlanId-$mgmtProviderVlanId 500-2000 2000-3000)
+n1kvNwProfileSegRange=($mgmtProviderVlanId-$mgmtProviderVlanId 500-2000 2001-3000)
 n1kvPortPolicyProfileNames=(osn_mgmt_pp osn_t1_pp osn_t2_pp)
 
 

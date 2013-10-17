@@ -38,7 +38,6 @@ from quantum.db import agents_db
 from quantum.db import agentschedulers_db
 from quantum.db import db_base_plugin_v2
 from quantum.db import dhcp_rpc_base
-from quantum.db import extraroute_db
 from quantum.db import securitygroups_rpc_base as sg_db_rpc
 from quantum.extensions import portbindings
 from quantum.extensions import providernet
@@ -55,6 +54,7 @@ from quantum.plugins.cisco.db import n1kv_db_v2
 from quantum.plugins.cisco.db import network_db_v2
 from quantum.plugins.cisco.extensions import n1kv_profile
 from quantum.plugins.cisco.l3.db import l3_cfg_rpc_base
+from quantum.plugins.cisco.l3.db import l3_router_appliance_db
 from quantum.plugins.cisco.n1kv import n1kv_client
 from quantum import policy
 
@@ -183,7 +183,7 @@ class AgentNotifierApi(proxy.RpcProxy,
 
 
 class N1kvQuantumPluginV2(db_base_plugin_v2.QuantumDbPluginV2,
-                          extraroute_db.ExtraRoute_db_mixin,
+                          l3_router_appliance_db.L3_router_appliance_db_mixin,
                           n1kv_db_v2.NetworkProfile_db_mixin,
                           n1kv_db_v2.PolicyProfile_db_mixin,
                           network_db_v2.Credential_db_mixin,
