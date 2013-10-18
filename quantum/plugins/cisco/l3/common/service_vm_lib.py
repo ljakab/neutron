@@ -19,6 +19,7 @@
 
 from novaclient.v1_1 import client
 from novaclient import exceptions as n_exc
+from novaclient import utils as n_utils
 from quantum.api.v2 import attributes
 from quantum.common import exceptions as q_exc
 from quantum import context as q_context
@@ -57,8 +58,14 @@ class ServiceVMManager:
         cfg_f = open(cfg) #Create a file descriptor
 
         try:
-            server = self._nclient.servers.create('csr1kv_nrouter', vm_image,
-                                                  vm_flavor, nics=nics,
+            image = n_utils.find_resource(self._nclient.images, vm_image)
+            flavor = n_utils.find_resource(self._nclient.flavors, vm_flavor)
+        except n_exc.CommandError as e:
+            LOG.error(_('Failure: %s'), e)
+            return None
+        try:
+            server = self._nclient.servers.create('csr1kv_nrouter', image.id,
+                                                  flavor.id, nics=nics,
                                                   userdata=cfg_f)
         except (n_exc.UnsupportedVersion, n_exc.CommandError,
                 n_exc.AuthorizationFailure, n_exc.NoUniqueMatch,
