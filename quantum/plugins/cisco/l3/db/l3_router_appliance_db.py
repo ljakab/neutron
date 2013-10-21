@@ -49,8 +49,6 @@ from quantum import manager
 from quantum.openstack.common import log as logging
 from quantum.openstack.common import timeutils
 
-import pdb
-
 
 LOG = logging.getLogger(__name__)
 
@@ -591,7 +589,6 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
                     return hosting_entities
                 #Zip and flatten the two port list together
                 ports = [x for t in zip(t1_p, t2_p) for x in t]
-                pdb.set_trace()
                 host_ent = svm.dispatch_service_vm(cfg.CONF.csr1kv_image,
                                                    cfg.CONF.csr1kv_flavor,
                                                    mgmt_port,
