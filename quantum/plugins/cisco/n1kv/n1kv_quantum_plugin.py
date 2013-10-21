@@ -42,6 +42,7 @@ from quantum.db import securitygroups_rpc_base as sg_db_rpc
 from quantum.extensions import portbindings
 from quantum.extensions import providernet
 from quantum.openstack.common import excutils
+from quantum.openstack.common import importutils
 from quantum.openstack.common import log as logging
 from quantum.openstack.common import rpc
 from quantum.openstack.common import uuidutils as uuidutils
@@ -225,6 +226,12 @@ class N1kvQuantumPluginV2(db_base_plugin_v2.QuantumDbPluginV2,
                 'extensions:quantum/plugins/cisco/extensions')
         self._setup_vsm()
         self._setup_rpc()
+        self.network_scheduler = importutils.import_object(
+            q_conf.CONF.network_scheduler_driver)
+        self.router_scheduler = importutils.import_object(
+            q_conf.CONF.router_scheduler_driver)
+        self.hosting_scheduler = importutils.import_object(
+            q_conf.CONF.hosting_scheduler_driver)
 
     def _setup_rpc(self):
         # RPC support
