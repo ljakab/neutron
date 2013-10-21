@@ -411,7 +411,7 @@ class ServiceVMManager:
         return mgmt_port, t1_n, t1_sub, t1_p, t2_n, t2_sub, t2_p
 
     def generate_config_for_csr(self, mgmtport):
-        mgmt_ip = mgmtport['fixed_ips']['ip_address']
+        mgmt_ip = mgmtport['fixed_ips'][0]['ip_address']
         try:
             config_template = (cfg.CONF.csr_config_path + "/" +
                                cfg.CONF.csr_config_template)
