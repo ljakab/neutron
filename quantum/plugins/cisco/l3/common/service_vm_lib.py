@@ -17,6 +17,8 @@
 # @author: Hareesh Puthalath, Cisco Systems, Inc.
 # @author: Bob Melander, Cisco Systems, Inc.
 
+from oslo.config import cfg
+
 from novaclient.v1_1 import client
 from novaclient import exceptions as n_exc
 from novaclient import utils as n_utils
@@ -28,7 +30,6 @@ from quantum.openstack.common import uuidutils
 from quantum.openstack.common import log as logging
 from quantum.plugins.cisco.l3.common import constants
 
-import pdb
 import netaddr
 
 LOG = logging.getLogger(__name__)
@@ -357,7 +358,6 @@ class ServiceVMManager:
                                 'id %(id)s'),
                               {'name': constants.T1_NETWORK_NAME + indx,
                                'id': t1_n[i]['id']})
-                    #pdb.set_trace()
                     sub_spec['subnet'].update(
                         {'name': constants.T1_SUBNET_NAME + indx,
                          'network_id': t1_n[i]['id']})
@@ -388,7 +388,6 @@ class ServiceVMManager:
                     sub_spec['subnet'].update(
                         {'name': constants.T2_SUBNET_NAME + indx,
                          'network_id': t2_n[i]['id']})
-                    #pdb.set_trace()
                     t2_sub.append(self._core_plugin.create_subnet(self._context,
                                                                   sub_spec))
 
@@ -410,6 +409,26 @@ class ServiceVMManager:
                 mgmt_port = None
                 t1_n, t1_p, t2_n, t2_p = [], [], [], []
         return mgmt_port, t1_n, t1_sub, t1_p, t2_n, t2_sub, t2_p
+
+    def generate_config_for_csr(self, mgmtport):
+        mgmt_ip = mgmtport['fixed_ips']['ip_address']
+        try:
+            config_template = (cfg.CONF.csr_config_path + "/" +
+                               cfg.CONF.csr_config_template)
+            vm_cfg = cfg.CONF.csr_config_path + "/csr_" + mgmtport['id'][0:8]
+
+            ori = open(config_template, 'r')
+            cfg = open(vm_cfg, "w")
+            for line in ori:
+                if "<ip>" in line:
+                    line = line.replace("<ip>", mgmt_ip)
+                    line = line.replace("<mask>", netmask)
+                cfg.write(line)
+            cfg.close()
+            ori.close()
+            return vm_cfg
+        except IOError as e:
+            LOG.error(_('Failed to create config file: %s'), str(e))
 
     # TODO(bob-melander): Move this to fake_service_vm_lib.py file
     # with FakeServiceVMManager
@@ -451,29 +470,6 @@ class ServiceVMManager:
             self._core_plugin.delete_network(self._context, net_id)
         return True
 
-    def generate_config_for_csr(self, mgmtport):
-
-        ip_cidr = mgmtport['ip_cidr']
-        netmask = netaddr.IPNetwork(ip_cidr).netmask
-        mgmtip = ip_cidr.split('/')[0]
-
-        try:
-            #ToDo: Check self.cfg
-            config_template = self.cfg.csr_config_path + "/" + self.cfg.csr_config_template
-            csrvm_cfg = self.cfg.csr_config_path + "/csr_" + mgmtport[0:8]
-
-            ori = open(config_template, 'r')
-            cfg = open(csrvm_cfg, "w")
-            for line in ori:
-                if "<ip>" in line:
-                    line = line.replace("<ip>", mgmtip)
-                    line = line.replace("<mask>", netmask)
-                cfg.write(line)
-            cfg.close()
-            ori.close()
-            return csrvm_cfg
-        except IOError as e:
-            LOG.error(_('Error in creating config file. Error is: %s'), str(e))
 
 
 
