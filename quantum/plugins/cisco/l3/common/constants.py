@@ -21,13 +21,13 @@ OVS_PLUGIN = 2
 ML2_PLUGIN = 3
 
 # T1 port/network is for VXLAN
-T1_PORT_NAME = 't1:'
+T1_PORT_NAME = 't1_p:'
 # T2 port/network is for VLAN
-T2_PORT_NAME = 't2:'
+T2_PORT_NAME = 't2_p:'
 T1_NETWORK_NAME = 't1_n:'
 T2_NETWORK_NAME = 't2_n:'
-T1_SUBNET_NAME = 't1_subnet:'
-T2_SUBNET_NAME = 't2_subnet:'
+T1_SUBNET_NAME = 't1_sn:'
+T2_SUBNET_NAME = 't2_sn:'
 
 # These prefix defines will go away when Nova allows spinning up
 # VMs with vifs on networks without subnet(s).
