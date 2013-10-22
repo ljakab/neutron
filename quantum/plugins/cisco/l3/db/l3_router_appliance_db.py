@@ -86,7 +86,7 @@ router_appliance_opts = [
                        'l3_hosting_entity_scheduler.L3HostingEntityScheduler',
                help=_('Driver to use for scheduling router to a hosting '
                       'entity')),
-    cfg.IntOpt('max_routers_per_csr1kv', default=3,
+    cfg.IntOpt('max_routers_per_csr1kv', default=1,
                help=_("The maximum number of logical routers a CSR1kv VM "
                       "instance will host")),
     cfg.IntOpt('standby_pool_size', default=2,
