@@ -98,7 +98,7 @@ router_appliance_opts = [
     cfg.StrOpt('templates_path',
                default='/opt/stack/data/quantum/cisco/templates',
                help=_("Path to default templates")),
-    cfg.StrOpt('csr_config_template', default='cfg_template',
+    cfg.StrOpt('csr_config_template', default='csr_cfg_template',
                help=_("CSR default template file name")),
     cfg.StrOpt('service_vm_config_path',
                default='/opt/stack/data/quantum/cisco/config_drive',
