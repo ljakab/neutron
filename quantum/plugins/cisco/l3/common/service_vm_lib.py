@@ -416,7 +416,7 @@ class ServiceVMManager:
     def generate_config_for_csr(self, mgmtport):
         mgmt_ip = mgmtport['fixed_ips'][0]['ip_address']
         subnet_cidr = self._core_plugin.get_subnet(
-            self._context, mgmtport['fixed_ips'][0]['subnet_id'], ['cidr'])
+            self._context, mgmtport['fixed_ips'][0]['subnet_id'], ['cidr'])['cidr']
         netmask = netaddr.IPNetwork(subnet_cidr).netmask
 
         try:
