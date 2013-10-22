@@ -17,7 +17,7 @@
 # @author: Hareesh Puthalath, Cisco Systems, Inc.
 # @author: Bob Melander, Cisco Systems, Inc.
 
-from oslo.config import cfg
+from oslo.config import cfg as q_conf
 
 from novaclient.v1_1 import client
 from novaclient import exceptions as n_exc
@@ -55,8 +55,11 @@ class ServiceVMManager:
         for port in ports:
             nics.append({'port-id': port['id']})
 
-        cfg = self.generate_config_for_csr(mgmt_port)
-        cfg_f = open(cfg) #Create a file descriptor
+        try:
+            cfg = self.generate_config_for_csr(mgmt_port)
+            cfg_f = open(cfg)
+        except IOError:
+            return None
 
         try:
             image = n_utils.find_resource(self._nclient.images, vm_image)
@@ -412,23 +415,29 @@ class ServiceVMManager:
 
     def generate_config_for_csr(self, mgmtport):
         mgmt_ip = mgmtport['fixed_ips'][0]['ip_address']
-        try:
-            config_template = (cfg.CONF.csr_config_path + "/" +
-                               cfg.CONF.csr_config_template)
-            vm_cfg = cfg.CONF.csr_config_path + "/csr_" + mgmtport['id'][0:8]
+        subnet_cidr = self._core_plugin.get_subnet(
+            self._context, mgmtport['fixed_ips'][0]['subnet_id'], ['cidr'])
+        netmask = netaddr.IPNetwork(subnet_cidr).netmask
 
-            ori = open(config_template, 'r')
-            cfg = open(vm_cfg, "w")
-            for line in ori:
+        try:
+            config_template_file = (q_conf.CONF.csr_config_path + "/" +
+                                    q_conf.CONF.csr_config_template)
+            vm_instance_cfg_file = (q_conf.CONF.csr_config_path + "/csr_" +
+                                    mgmtport['id'][0:8])
+
+            cfg_template = open(config_template_file, 'r')
+            vm_instance_cfg = open(vm_instance_cfg_file, "w")
+            for line in cfg_template:
                 if "<ip>" in line:
                     line = line.replace("<ip>", mgmt_ip)
                     line = line.replace("<mask>", netmask)
-                cfg.write(line)
-            cfg.close()
-            ori.close()
-            return vm_cfg
+                vm_instance_cfg.write(line)
+            vm_instance_cfg.close()
+            cfg_template.close()
+            return vm_instance_cfg_file
         except IOError as e:
             LOG.error(_('Failed to create config file: %s'), str(e))
+            raise
 
     # TODO(bob-melander): Move this to fake_service_vm_lib.py file
     # with FakeServiceVMManager
