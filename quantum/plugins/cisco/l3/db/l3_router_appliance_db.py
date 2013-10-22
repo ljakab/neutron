@@ -89,7 +89,7 @@ router_appliance_opts = [
     cfg.IntOpt('max_routers_per_csr1kv', default=1,
                help=_("The maximum number of logical routers a CSR1kv VM "
                       "instance will host")),
-    cfg.IntOpt('standby_pool_size', default=2,
+    cfg.IntOpt('standby_pool_size', default=1,
                help=_("The number of running CSR1kv VMs to maintain "
                       "as a pool of standby VMs")),
     cfg.IntOpt('csr1kv_booting_time', default=300,
