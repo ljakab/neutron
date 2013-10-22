@@ -770,12 +770,14 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
                 'port': binding_info.hosting_entity.transport_port,
                 'created_at': str(binding_info.hosting_entity.created_at)}
 
-    def _get_port_target_type(self, port_db):
-        if (self._plugin == cl3_const.N1KV_PLUGIN and
-                port_db[n1kv_profile.PROFILE_ID] == self.n1kv_t2_np_id()):
-            return cl3_const.T2_PORT_NAME
-        else:
-            return cl3_const.T1_PORT_NAME
+    def _get_port_target_type(self, context, net_id):
+        if self._plugin == cl3_const.N1KV_PLUGIN:
+            net_data = self.get_network(context, net_id, [pr_net.NETWORK_TYPE])
+            if net_data.get(pr_net.NETWORK_TYPE) == 'vlan':
+                return cl3_const.T2_PORT_NAME
+            else:
+                return cl3_const.T1_PORT_NAME
+        return cl3_const.T1_PORT_NAME
 
     def _populate_port_trunk_info(self, context, router,
                                   ext_gw_change_status=None,
@@ -933,7 +935,7 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
                 nets_to_trunk = trunk_mappings.keys()
                 n_id_tags = self.get_networks(
                     context, {'id': nets_to_trunk},
-                    ['id', 'provider:segmentation_id'])
+                    ['id', pr_net.SEGMENTATION_ID])
                 nets_to_trunk = set(nets_to_trunk)
                 # fill in actual VLAN tags that are used
                 for info in n_id_tags:
