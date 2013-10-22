@@ -413,6 +413,10 @@ class ServiceVMManager:
                 t1_n, t1_p, t2_n, t2_p = [], [], [], []
         return mgmt_port, t1_n, t1_sub, t1_p, t2_n, t2_sub, t2_p
 
+    def _unique_cfgdrive_filename(self, pre, uuid, suff=''):
+        end = constants.CFG_DRIVE_UUID_START + constants.CFG_DRIVE_UUID_LEN
+        return pre + uuid[constants.CFG_DRIVE_UUID_START:end] + suff
+
     def generate_config_for_csr(self, mgmtport):
         mgmt_ip = mgmtport['fixed_ips'][0]['ip_address']
         subnet_cidr = self._core_plugin.get_subnet(
@@ -420,11 +424,10 @@ class ServiceVMManager:
         netmask = netaddr.IPNetwork(subnet_cidr).netmask
 
         try:
-            config_template_file = (q_conf.CONF.csr_config_path + "/" +
+            config_template_file = (q_conf.CONF.templates_path + "/" +
                                     q_conf.CONF.csr_config_template)
-            vm_instance_cfg_file = (q_conf.CONF.csr_config_path + "/csr_" +
-                                    mgmtport['id'][0:8])
-
+            vm_instance_cfg_file = self._unique_cfgdrive_filename(
+                q_conf.CONF.service_vm_config_path + "/csr_", mgmtport['id'])
             cfg_template = open(config_template_file, 'r')
             vm_instance_cfg = open(vm_instance_cfg_file, "w")
             for line in cfg_template:

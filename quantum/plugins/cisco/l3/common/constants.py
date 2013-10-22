@@ -36,7 +36,6 @@ SUB_PREFX = '172.16.1.0/24'
 T1_SUBNET_START_PREFX = '172.16.'
 T2_SUBNET_START_PREFX = '172.32.'
 
-
 # Hosting entities are of one of the following types.
 NETWORK_NODE_HOST = 'NetworkNamespaceNode'
 CSR1KV_HOST = 'CSR1kv'
@@ -55,3 +54,7 @@ CSR1kv_SSH_NETCONF_PORT = 22
 
 # Topic for L3 configuration agent
 L3_CFG_AGENT = 'l3_cfg_agent'
+
+# Length mgmt port UUID to be part of VM's config drive filename
+CFG_DRIVE_UUID_START = 24
+CFG_DRIVE_UUID_LEN = 12
