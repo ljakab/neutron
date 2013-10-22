@@ -804,7 +804,7 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
         did_allocation = False
         hosting_pdata = {cl3_const.T1_PORT_NAME: {'mac': None, 'name': None},
                          cl3_const.T2_PORT_NAME: {'mac': None, 'name': None}}
-        if router['gw_port_id'] is None:
+        if router['external_gateway_info'] is None:
             port_target_type = None
         else:
             port_target_type = self._get_port_target_type(router['gw_port'])
