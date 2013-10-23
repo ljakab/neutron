@@ -17,6 +17,8 @@
 # @author: Hareesh Puthalath, Cisco Systems, Inc.
 # @author: Bob Melander, Cisco Systems, Inc.
 
+import os
+
 from oslo.config import cfg as q_conf
 
 from novaclient.v1_1 import client
@@ -83,14 +85,16 @@ class ServiceVMManager:
 
     def delete_service_vm(self, id, mgmt_nw_id, delete_networks=False):
         to_delete = []
-        if delete_networks:
-            ports = self._core_plugin.get_ports(self._context,
-                                                filters={'device_id': [id]})
+        ports = self._core_plugin.get_ports(self._context,
+                                            filters={'device_id': [id]})
 
-            for port in ports:
-                if port['network_id'] != mgmt_nw_id:
+        for port in ports:
+            if port['network_id'] != mgmt_nw_id:
+                if delete_networks:
                     to_delete.append({'subnet': port['fixed_ips']['subnet_id'],
                                       'net': port['network_id']})
+            else:
+                self.delete_config_file_for_csr(port['id'])
         result = True
         try:
             self._nclient.servers.delete(id)
@@ -447,6 +451,15 @@ class ServiceVMManager:
         except IOError as e:
             LOG.error(_('Failed to create config file: %s'), str(e))
             raise
+
+    def delete_config_file_for_csr(self, uuid):
+        vm_instance_cfg_file = self._unique_cfgdrive_filename(
+            q_conf.CONF.service_vm_config_path + "/csr_", uuid,
+            ".cfg")
+        try:
+            os.remove(vm_instance_cfg_file)
+        except OSError as e:
+            LOG.error(_('Failed to delete config file: %s'), str(e))
 
     # TODO(bob-melander): Move this to fake_service_vm_lib.py file
     # with FakeServiceVMManager
