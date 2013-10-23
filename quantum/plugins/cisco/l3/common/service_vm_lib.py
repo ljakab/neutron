@@ -436,10 +436,10 @@ class ServiceVMManager:
             vm_instance_cfg = open(vm_instance_cfg_file, "w")
             # insert proper instance values in the template
             for line in cfg_template:
-                tokens = line.split(' ')
+                tokens = line.strip('\n').split(' ')
                 result = [params[token] if token in params.keys()
                           else token for token in tokens]
-                line = ' '.join(map(str, result))
+                line = ' '.join(map(str, result)) + '\n'
                 vm_instance_cfg.write(line)
             vm_instance_cfg.close()
             cfg_template.close()
