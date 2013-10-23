@@ -413,7 +413,8 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
             old_ext_gw = o_r_db.gw_port.network_id
             trunk_network_id = self._get_trunk_network_id(context,
                                                           o_r_db.gw_port)
-            old_port_target_type = self._get_port_target_type(or_r_db.gw_port)
+            old_port_target_type = self._get_port_target_type(
+                context, or_r_db.gw_port.network_id)
         #TODO(bobmel): Check if 'is None' test is really needed
         ext_gateway_changed = (
             False if (old_ext_gw == new_ext_gw or
@@ -809,7 +810,7 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
         if router['external_gateway_info'] is None:
             port_target_type = None
         else:
-            port_target_type = self._get_port_target_type(router['gw_port'])
+            port_target_type = self._get_port_target_type(context, router['gw_port']['network_id'])
             tr_info, did_allocation = self._populate_trunk_for_port(
                 context, router['gw_port'], router['hosting_entity']['id'],
                 router['id'], port_target_type,
@@ -831,7 +832,7 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
                     # vlan trunk is updated during allocation.
                     trunk_data[port_target_type]['update'] = True
         for itfc in router.get(l3_constants.INTERFACE_KEY, []):
-            port_target_type = self._get_port_target_type(itfc)
+            port_target_type = self._get_port_target_type(context, itfc['network_id'])
             tr_info, did_allocation = self._populate_trunk_for_port(
                 context, itfc, router['hosting_entity']['id'],
                 router['id'], port_target_type,
