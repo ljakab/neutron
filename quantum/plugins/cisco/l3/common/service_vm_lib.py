@@ -419,21 +419,27 @@ class ServiceVMManager:
 
     def generate_config_for_csr(self, mgmtport):
         mgmt_ip = mgmtport['fixed_ips'][0]['ip_address']
-        subnet_cidr = self._core_plugin.get_subnet(
-            self._context, mgmtport['fixed_ips'][0]['subnet_id'], ['cidr'])['cidr']
-        netmask = str(netaddr.IPNetwork(subnet_cidr).netmask)
-
+        subnet_data = self._core_plugin.get_subnet(
+            self._context, mgmtport['fixed_ips'][0]['subnet_id'],
+            ['cidr', 'gateway_ip', 'dns_nameservers'])
+        netmask = str(netaddr.IPNetwork(subnet_data['cidr']).netmask)
+        params = {'<ip>': mgmt_ip, '<mask>': netmask,
+                  '<gw>': subnet_data['gateway_ip'],
+                  '<name_server>': '8.8.8.8'}
         try:
             config_template_file = (q_conf.CONF.templates_path + "/" +
                                     q_conf.CONF.csr_config_template)
             vm_instance_cfg_file = self._unique_cfgdrive_filename(
-                q_conf.CONF.service_vm_config_path + "/csr_", mgmtport['id'])
+                q_conf.CONF.service_vm_config_path + "/csr_", mgmtport['id'],
+                ".cfg")
             cfg_template = open(config_template_file, 'r')
             vm_instance_cfg = open(vm_instance_cfg_file, "w")
+            # insert proper instance values in the template
             for line in cfg_template:
-                if "<ip>" in line:
-                    line = line.replace("<ip>", mgmt_ip)
-                    line = line.replace("<mask>", netmask)
+                tokens = line.split(' ')
+                result = [params[token] if token in params.keys()
+                          else token for token in tokens]
+                line = ' '.join(map(str, result))
                 vm_instance_cfg.write(line)
             vm_instance_cfg.close()
             cfg_template.close()
