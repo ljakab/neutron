@@ -1391,7 +1391,7 @@ class N1kvQuantumPluginV2(db_base_plugin_v2.QuantumDbPluginV2,
         :returns: port dictionary
         """
         LOG.debug(_("Get port: %s"), id)
-        port = super(N1kvQuantumPluginV2, self).get_port(context, id, fields)
+        port = super(N1kvQuantumPluginV2, self).get_port(context, id, None)
         self._extend_port_dict_profile(context, port)
         self._extend_port_dict_binding(context, port)
         return self._fields(port, fields)
@@ -1413,7 +1413,7 @@ class N1kvQuantumPluginV2(db_base_plugin_v2.QuantumDbPluginV2,
         """
         LOG.debug(_("Get ports"))
         ports = super(N1kvQuantumPluginV2, self).get_ports(context, filters,
-                                                           fields)
+                                                           None)
         for port in ports:
             self._extend_port_dict_profile(context, port)
             self._extend_port_dict_binding(context, port)
