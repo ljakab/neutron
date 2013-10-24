@@ -928,9 +928,9 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
                                           [n1kv_profile.PROFILE_ID,
                                            n1kv_profile.MEMBER_SEGMENTS])
             if np_id_t_nw.get(n1kv_profile.PROFILE_ID) == self.n1kv_t1_np_id():
-                # for vxlan trunked segment, id:s end with link local vlan tag
-                nets_to_trunk = set([k + '-' + str(v)
-                                     for k,v in trunk_mappings.items()])
+                # for vxlan trunked segment, id:s end with ':'link local vlan tag
+                nets_to_trunk = set([k + ':' + str(v)
+                                     for k, v in trunk_mappings.items()])
             else:
                 # not so for vlan trunked segments
                 nets_to_trunk = trunk_mappings.keys()
@@ -945,8 +945,12 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
             trunks_to_add = nets_to_trunk - curr_trunks
             trunks_to_del = curr_trunks - nets_to_trunk
             network_dict = {'network': {
-                n1kv_profile.SEGMENT_ADD: list(trunks_to_add),
-                n1kv_profile.SEGMENT_DEL: list(trunks_to_del)}}
+#                n1kv_profile.SEGMENT_ADD: list(trunks_to_add),
+                n1kv_profile.SEGMENT_ADD: ', '.join(str(ta)
+                                                    for ta in trunks_to_add),
+#                n1kv_profile.SEGMENT_DEL: list(trunks_to_del)}}
+                n1kv_profile.SEGMENT_DEL: ', '.join(str(td)
+                                                    for td in trunks_to_del)}}
             self.update_network(context, trunk_network_id, network_dict)
             return trunk_mappings
         else:
