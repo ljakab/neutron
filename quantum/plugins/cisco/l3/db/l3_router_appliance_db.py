@@ -944,14 +944,18 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
             curr_trunks = set(np_id_t_nw[n1kv_profile.MEMBER_SEGMENTS])
             trunks_to_add = nets_to_trunk - curr_trunks
             trunks_to_del = curr_trunks - nets_to_trunk
-            network_dict = {'network': {
-#                n1kv_profile.SEGMENT_ADD: list(trunks_to_add),
-                n1kv_profile.SEGMENT_ADD: ', '.join(str(ta)
-                                                    for ta in trunks_to_add),
-#                n1kv_profile.SEGMENT_DEL: list(trunks_to_del)}}
-                n1kv_profile.SEGMENT_DEL: ', '.join(str(td)
-                                                    for td in trunks_to_del)}}
-            self.update_network(context, trunk_network_id, network_dict)
+            network_dict = {}
+            if len(trunks_to_add) > 0:
+                network_dict.update(
+                    {n1kv_profile.SEGMENT_ADD:
+                     ', '.join(str(ta) for ta in trunks_to_add)})
+            if len(trunks_to_del) > 0:
+                network_dict.update(
+                    {n1kv_profile.SEGMENT_DEL:
+                     ', '.join(str(td) for td in trunks_to_del)})
+            if len(network_dict) > 0:
+                self.update_network(context, trunk_network_id,
+                                    {'network': network_dict})
             return trunk_mappings
         else:
             network_dict = {'network': {TRUNKED_NETWORKS: trunk_mappings}}
