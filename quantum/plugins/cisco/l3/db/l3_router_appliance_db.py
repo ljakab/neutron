@@ -954,8 +954,10 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
                     {n1kv_profile.SEGMENT_DEL:
                      ', '.join(str(td) for td in trunks_to_del)})
             if len(network_dict) > 0:
-                self.update_network(context, trunk_network_id,
-                                    {'network': network_dict})
+                LOG.info(_('Updating trunking'))
+                #TODO(bobmel): enable below line when N1kv works.
+                #self.update_network(context, trunk_network_id,
+                #                    {'network': network_dict})
             return trunk_mappings
         else:
             network_dict = {'network': {TRUNKED_NETWORKS: trunk_mappings}}
