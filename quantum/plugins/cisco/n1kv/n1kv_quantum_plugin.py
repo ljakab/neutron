@@ -225,6 +225,12 @@ class N1kvQuantumPluginV2(db_base_plugin_v2.QuantumDbPluginV2,
             q_conf.CONF.set_override(
                 'api_extensions_path',
                 'extensions:quantum/plugins/cisco/extensions')
+        #TODO(bobmel): Remove this over-ride of router scheduler default
+        #TODO(bobmel): setting and make it part of installer instead.
+        q_conf.CONF.set_override('router_scheduler_driver',
+                                 'quantum.plugins.cisco.l3.scheduler.'
+                                 'l3_agent_composite_scheduler.'
+                                 'L3AgentCompositeScheduler')
         self._setup_vsm()
         self._setup_rpc()
         self.network_scheduler = importutils.import_object(
