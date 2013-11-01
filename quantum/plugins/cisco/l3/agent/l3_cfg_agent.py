@@ -348,9 +348,9 @@ class L3NATAgent(manager.Manager):
         _name = port['trunk_info']['hosting_port_name']
         type = _name.split(':')[0]
         if type == 't1':
-            no = str(int(_name.split(':')[1]) * 2 - 1)
-        elif type == 't2':
             no = str(int(_name.split(':')[1]) * 2)
+        elif type == 't2':
+            no = str(int(_name.split(':')[1]) * 2 + 1)
         else:
             LOG.error(_('Unknown interface name (neither t1 or t2): %s'), type)
         return no
