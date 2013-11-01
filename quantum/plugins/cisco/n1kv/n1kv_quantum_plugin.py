@@ -205,7 +205,8 @@ class N1kvQuantumPluginV2(db_base_plugin_v2.QuantumDbPluginV2,
                                    "policy_profile_binding",
                                    "network_profile_binding", "quotas",
                                    "n1kv_profile", "network_profile",
-                                   "policy_profile", "router", "credential"]
+                                   "policy_profile", "router", "credential",
+                                   "agent_scheduler"]
 
     binding_view = "extension:port_binding:view"
     binding_set = "extension:port_binding:set"
