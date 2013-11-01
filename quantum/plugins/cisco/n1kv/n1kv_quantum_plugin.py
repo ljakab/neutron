@@ -35,7 +35,6 @@ from quantum.common import topics
 from quantum.common import utils 
 from quantum.db import quota_db
 from quantum.db import agents_db
-from quantum.db import agentschedulers_db
 from quantum.db import db_base_plugin_v2
 from quantum.db import dhcp_rpc_base
 from quantum.db import securitygroups_rpc_base as sg_db_rpc
@@ -54,6 +53,7 @@ from quantum.plugins.cisco.common import config as c_conf
 from quantum.plugins.cisco.db import n1kv_db_v2
 from quantum.plugins.cisco.db import network_db_v2
 from quantum.plugins.cisco.extensions import n1kv_profile
+from quantum.plugins.cisco.l3.db import composite_agentschedulers_db as agt_sch_db
 from quantum.plugins.cisco.l3.db import l3_cfg_rpc_base
 from quantum.plugins.cisco.l3.db import l3_router_appliance_db
 from quantum.plugins.cisco.n1kv import n1kv_client
@@ -188,7 +188,7 @@ class N1kvQuantumPluginV2(db_base_plugin_v2.QuantumDbPluginV2,
                           n1kv_db_v2.NetworkProfile_db_mixin,
                           n1kv_db_v2.PolicyProfile_db_mixin,
                           network_db_v2.Credential_db_mixin,
-                          agentschedulers_db.AgentSchedulerDbMixin):
+                          agt_sch_db.CompositeAgentSchedulerDbMixin):
 
     """
     Implement the Quantum abstractions using Cisco Nexus1000V
