@@ -109,10 +109,12 @@ class CiscoCSRDriver():
 
     def _enable_intfs(self, conn):
         #interfaces = ['GigabitEthernet 1', 'GigabitEthernet 2']
-
-        interfaces = ['GigabitEthernet 1', 'GigabitEthernet 2',
-                       'GigabitEthernet 3', 'GigabitEthernet 4',
-                       'GigabitEthernet 5', 'GigabitEthernet 6']
+        # CSR1kv, in release 3.11 GigabitEthernet 0 is gone.
+        # so GigabitEthernet 1 is used as management and 2 up
+        # is used for data.
+        interfaces = ['GigabitEthernet 2', 'GigabitEthernet 3',
+                       'GigabitEthernet 4', 'GigabitEthernet 5',
+                       'GigabitEthernet 6', 'GigabitEthernet 7']
         try:
             for i in interfaces:
                 confstr = snippets.ENABLE_INTF % i
