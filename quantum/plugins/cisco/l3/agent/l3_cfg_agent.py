@@ -348,12 +348,12 @@ class L3NATAgent(manager.Manager):
     def _get_interface_no_from_hosting_port(self, port):
         _name = port['trunk_info']['hosting_port_name']
         type = _name.split(':')[0]
-        if type == 't1':
+        if type == cl3_constants.T1_PORT_NAME:
             no = str(int(_name.split(':')[1]) * 2)
-        elif type == 't2':
+        elif type == cl3_constants.T2_PORT_NAME:
             no = str(int(_name.split(':')[1]) * 2 + 1)
         else:
-            LOG.error(_('Unknown interface name (neither t1 or t2): %s'), type)
+            LOG.error(_('Unknown interface name: %s'), type)
         return no
 
     def _fetch_external_net_id(self):
