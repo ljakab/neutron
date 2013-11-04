@@ -118,9 +118,9 @@ class HostingEntities(object):
         _he_passwd = 'lab'
 
         _csr_driver = cisco_csr_network_driver.CiscoCSRDriver(_he_ip,
-                                                               _he_port,
-                                                               _he_user,
-                                                               _he_passwd)
+                                                              _he_port,
+                                                              _he_user,
+                                                              _he_passwd)
         self.router_id_hosting_entities[router_id] = hosting_entity
         self._drivers[_he_id] = _csr_driver
 
@@ -150,7 +150,7 @@ class RouterInfo(object):
 class L3NATAgent(manager.Manager):
 
     OPTS = [
-        cfg.StrOpt('external_network_bridge', default='br-ex',
+        cfg.StrOpt('external_network_bridge', default='',
                    help=_("Name of bridge used for external network "
                           "traffic.")),
         cfg.StrOpt('interface_driver',
