@@ -44,6 +44,8 @@ class CiscoCSRDriver():
         self._csr_conn = None
         self._allow_agent = False
         self._intfs_enabled = False
+        # This will disable any public key lookup
+        self._look_for_keys = False
 
     def _get_connection(self):
         """Make SSH connection to the CSR """
@@ -55,7 +57,8 @@ class CiscoCSRDriver():
                                                  port=self._csr_ssh_port,
                                                  username=self._csr_user,
                                                  password=self._csr_password,
-                                                 allow_agent=self._allow_agent)
+                                                 allow_agent=self._allow_agent,
+                                                 look_for_keys=self._look_for_keys)
                 #self._csr_conn.async_mode = True
                 if not self._intfs_enabled:
                     self._intfs_enabled = self._enable_intfs(self._csr_conn)
