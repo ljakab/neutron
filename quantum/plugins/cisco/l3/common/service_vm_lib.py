@@ -83,10 +83,10 @@ class ServiceVMManager:
         res = {'id': server.id}
         return res
 
-    def delete_service_vm(self, id, mgmt_nw_id, delete_networks=False):
+    def delete_service_vm(self, vm_id, mgmt_nw_id, delete_networks=False):
         to_delete = []
         ports = self._core_plugin.get_ports(self._context,
-                                            filters={'device_id': [id]})
+                                            filters={'device_id': [vm_id]})
 
         for port in ports:
             if port['network_id'] != mgmt_nw_id:
@@ -97,14 +97,14 @@ class ServiceVMManager:
                 self.delete_config_file_for_csr(port['id'])
         result = True
         try:
-            self._nclient.servers.delete(id)
+            self._nclient.servers.delete(vm_id)
         except (n_exc.UnsupportedVersion, n_exc.CommandError,
                 n_exc.AuthorizationFailure, n_exc.NoUniqueMatch,
                 n_exc.AuthSystemNotFound, n_exc.NoTokenLookupException,
                 n_exc.EndpointNotFound, n_exc.AmbiguousEndpoints,
                 n_exc.ConnectionRefused, n_exc.ClientException) as e:
             LOG.error(_('Failed to delete service VM instance %(id)s, '
-                        'due to %(err)s'), {'id': id, 'err': e})
+                        'due to %(err)s'), {'id': vm_id, 'err': e})
             result = False
         for ids in to_delete:
             try:
@@ -112,14 +112,14 @@ class ServiceVMManager:
                 self._core_plugin.delete_subnet(self._context, ids['subnet'])
             except q_exc.QuantumException as e:
                 LOG.error(_('Failed to delete subnet %(subnet_id)s for '
-                            'service VM %(vm_id) due to %(err)s'),
-                          {'subnet_id': ids['subnet'], 'vm_id': id, 'err': e})
+                            'service VM %(id)s due to %(err)s'),
+                          {'subnet_id': ids['subnet'], 'id': vm_id, 'err': e})
             try:
                 self._core_plugin.delete_network(self._context, ids['net'])
             except q_exc.QuantumException as e:
                 LOG.error(_('Failed to delete network %(net_id)s for service '
-                            'VM %(vm_id) due to %(err)s'),
-                          {'net_id': ids['net'], 'vm_id': id, 'err': e})
+                            'VM %(id) due to %(err)s'),
+                          {'net_id': ids['net'], 'id': vm_id, 'err': e})
         return result
 
     def cleanup_for_service_vm(self, plugin, mgmt_port, t1_n, t1_sub, t1_p,

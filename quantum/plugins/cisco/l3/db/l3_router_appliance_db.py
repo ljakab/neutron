@@ -664,7 +664,7 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
         num_possible_to_delete = min(len(he_candidates), num)
         with context.session.begin(subtransactions=True):
             for i in xrange(0, num_possible_to_delete):
-                if svm.delete_service_vm(he_candidates[i],
+                if svm.delete_service_vm(he_candidates[i]['id'],
                                          self.mgmt_nw_id(),
                                          delete_networks=True):
                     context.session.delete(he_candidates[i])
