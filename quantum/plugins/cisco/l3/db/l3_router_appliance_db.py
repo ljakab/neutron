@@ -403,7 +403,7 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
         r = router['router']
         # Check if external gateway has changed so we may have to
         # update trunking
-        new_ext_gw = r.get(l3_db.EXTERNAL_GW_INFO, {}).get('network_id', '')
+        new_ext_gw = r.get('external_gateway_info', {}).get('network_id', '')
         o_r_db = self._get_router(context, id)
         if o_r_db.gw_port is None:
             old_ext_gw = ''
@@ -419,7 +419,7 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
         #TODO(bobmel): Check if 'is None' test is really needed
         ext_gateway_changed = (
             False if (old_ext_gw == new_ext_gw or
-                      r.get(l3_db.EXTERNAL_GW_INFO) is None)
+                      r.get('external_gateway_info') is None)
             else True)
         router_updated = (
             super(L3_router_appliance_db_mixin, self).update_router(context,
