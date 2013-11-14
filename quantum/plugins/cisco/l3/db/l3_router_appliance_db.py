@@ -415,7 +415,7 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
             old_hosting_port_id, old_trunk_nw_id = (
                 self._get_trunk_port_and_network_ids(context, o_r_db.gw_port))
             old_port_target_type = self._get_port_target_type(
-                context, or_r_db.gw_port.network_id)
+                context, o_r_db.gw_port.network_id)
         #TODO(bobmel): Check if 'is None' test is really needed
         ext_gateway_changed = (
             False if (old_ext_gw == new_ext_gw or
