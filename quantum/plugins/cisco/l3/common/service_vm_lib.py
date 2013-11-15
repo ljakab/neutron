@@ -88,14 +88,26 @@ class ServiceVMManager:
         ports = self._core_plugin.get_ports(self._context,
                                             filters={'device_id': [vm_id]})
 
+        result = True
         for port in ports:
             if port['network_id'] != mgmt_nw_id:
                 if delete_networks:
                     to_delete.append({'subnet': port['fixed_ips'][0]['subnet_id'],
                                       'net': port['network_id']})
             else:
+                # id of mgmt port is used in config file name so
+                # we delete that file here.
                 self.delete_config_file_for_csr(port['id'])
-        result = True
+            # We delete the ports here even though Nova will try to do the same
+            # later. But Nova's delete comes to late since we want to delete the
+            # t1 and t2 subnets and networks in this function.
+            try:
+                self._core_plugin.delete_port(self._context, port['id'])
+            except q_exc.QuantumException as e:
+                LOG.error(_('Failed to delete port %(port_id)s for '
+                            'service VM %(id)s due to %(err)s'),
+                          {'port_id': port['id'], 'id': vm_id, 'err': e})
+                result = False
         try:
             self._nclient.servers.delete(vm_id)
         except (n_exc.UnsupportedVersion, n_exc.CommandError,
