@@ -232,6 +232,9 @@ class L3HostingEntityScheduler(object):
         if router['router_type'] == cl3_const.CSR_ROUTER_TYPE:
             if self._avail_svc_vm_slots < 0:
                 self.sync_service_vm_pool_counters(context)
+                # Sync calculation includes the unscheduled router so
+                # we must subtract it here to avoid counting it twice.
+                self._avail_svc_vm_slots = max(0, self._avail_svc_vm_slots - 1)
             if hosting_entity_db['tenant_bound'] is not None:
                 query = context.session.query(
                     l3_ra_db.RouterHostingEntityBinding)
