@@ -813,7 +813,7 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
         # We only populate trunk info, i.e., reach here, if the
         # router has been scheduled to a hosting entity. Hence this
         # a good place to allocate hosting ports to the router ports.
-        if ext_gw_change_status is None:
+{}        if ext_gw_change_status is None:
             ext_gw_change_status = {}
         if int_if_change_status is None:
             int_if_change_status = {}
@@ -980,7 +980,7 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
             # For VLAN core plugin provides VLAN tag.
             trunk_mappings[port_db['network_id']] = None
 
-            tags = self.get_networks(context, {'id': port_db['network_id']},
+            tags = self.get_networks(context, {'id': [port_db['network_id']]},
                                      [pr_net.SEGMENTATION_ID])
             allocated_vlan = (None if tags == []
                               else tags[0].get(pr_net.SEGMENTATION_ID))
