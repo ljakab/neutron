@@ -91,7 +91,7 @@ class ServiceVMManager:
         for port in ports:
             if port['network_id'] != mgmt_nw_id:
                 if delete_networks:
-                    to_delete.append({'subnet': port['fixed_ips']['subnet_id'],
+                    to_delete.append({'subnet': port['fixed_ips'][0]['subnet_id'],
                                       'net': port['network_id']})
             else:
                 self.delete_config_file_for_csr(port['id'])
