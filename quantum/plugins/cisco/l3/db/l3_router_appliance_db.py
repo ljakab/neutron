@@ -499,12 +499,15 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
 
         hosting_port_id, trunk_network_id = (
             self._get_trunk_port_and_network_ids(context, port_db))
-        if_chg_status = {
-            'changed': True,
-            'old_hosting_port_name': self._get_hosting_port_name(
-                context, trunk_network_id),
-            'old_hosting_port_id': hosting_port_id,
-            'old_trunk_nw_id': trunk_network_id}
+        if hosting_port_id is None:
+            if_chg_status = None
+        else:
+            if_chg_status = {
+                'changed': True,
+                'old_hosting_port_name': self._get_hosting_port_name(
+                    context, trunk_network_id),
+                'old_hosting_port_id': hosting_port_id,
+                'old_trunk_nw_id': trunk_network_id}
 
         info = (super(L3_router_appliance_db_mixin, self).
                 remove_router_interface(context, router_id, interface_info))
