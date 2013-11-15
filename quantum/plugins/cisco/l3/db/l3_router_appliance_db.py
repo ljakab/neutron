@@ -180,6 +180,8 @@ class TrunkInfo(model_base.BASEV2):
                                    backref=orm.backref('trunk_info',
                                                        cascade='all',
                                                        uselist=False))
+    # type of network the router port belongs to
+    network_type = sa.Column(sa.String(32))
     hosting_port_id = sa.Column(sa.String(36),
                                 sa.ForeignKey('ports.id',
                                               ondelete='SET NULL'))
@@ -409,12 +411,12 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
             old_ext_gw = ''
             old_trunk_nw_id = None
             old_hosting_port_id = None
-            old_port_target_type = ''
+            old_hosting_port_name = ''
         else:
             old_ext_gw = o_r_db.gw_port.network_id
             old_hosting_port_id, old_trunk_nw_id = (
                 self._get_trunk_port_and_network_ids(context, o_r_db.gw_port))
-            old_port_target_type = self._get_port_target_type(
+            old_hosting_port_name = self._get_hosting_port_name(
                 context, o_r_db.gw_port.network_id)
         #TODO(bobmel): Check if 'is None' test is really needed
         ext_gateway_changed = (
@@ -426,7 +428,7 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
                                                                     id,
                                                                     router))
         gw_change_status = {'changed': ext_gateway_changed,
-                            'old_port_target_type': old_port_target_type,
+                            'old_hosting_port_name': old_hosting_port_name,
                             'old_hosting_port_id': old_hosting_port_id,
                             'old_trunk_nw_id': old_trunk_nw_id}
         routers = self.get_sync_data_ext(context.elevated(), [o_r_db['id']],
@@ -465,7 +467,7 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
         info = (super(L3_router_appliance_db_mixin, self).
                 add_router_interface(context, router_id, interface_info))
         if_chg_status = {'changed': True,
-                         'old_port_target_type': '',
+                         'old_hosting_port_name': '',
                          'old_hosting_port_id': None,
                          'old_trunk_nw_id': None}
         routers = self.get_sync_data_ext(context.elevated(), [router_id],
@@ -499,7 +501,7 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
             self._get_trunk_port_and_network_ids(context, port_db))
         if_chg_status = {
             'changed': True,
-            'old_port_target_type': self._get_port_target_type(
+            'old_hosting_port_name': self._get_hosting_port_name(
                 context, trunk_network_id),
             'old_hosting_port_id': hosting_port_id,
             'old_trunk_nw_id': trunk_network_id}
@@ -784,7 +786,7 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
                 'port': binding_info.hosting_entity.transport_port,
                 'created_at': str(binding_info.hosting_entity.created_at)}
 
-    def _get_port_target_type(self, context, net_id):
+    def _get_hosting_port_name(self, context, net_id):
         if self._plugin == cl3_const.N1KV_PLUGIN:
             net_data = self.get_network(context, net_id, [pr_net.NETWORK_TYPE])
             if net_data.get(pr_net.NETWORK_TYPE) == 'vlan':
@@ -792,6 +794,12 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
             else:
                 return cl3_const.T1_PORT_NAME
         return cl3_const.T1_PORT_NAME
+
+    def _get_network_type(self, hosting_port_name):
+        if hosting_port_name == cl3_const.T2_PORT_NAME:
+            return 'vlan'
+        else:
+            return 'vxlan'
 
     def _populate_port_trunk_info(self, context, router,
                                   ext_gw_change_status=None,
@@ -818,18 +826,17 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
         hosting_pdata = {cl3_const.T1_PORT_NAME: {'mac': None, 'name': None},
                          cl3_const.T2_PORT_NAME: {'mac': None, 'name': None}}
         if router['external_gateway_info'] is None:
-            port_target_type = None
+            trunk_port_name = None
         else:
-            port_target_type = self._get_port_target_type(
+            trunk_port_name = self._get_hosting_port_name(
                 context, router['gw_port']['network_id'])
             tr_info, did_allocation = self._populate_trunk_for_port(
                 context, router['gw_port'], router['hosting_entity']['id'],
-                router['id'], port_target_type,
-                l3_db.DEVICE_OWNER_ROUTER_GW, hosting_pdata[port_target_type])
+                router['id'], trunk_port_name, hosting_pdata[trunk_port_name])
         if ext_gw_change_status.get('changed', False):
-            old_p_t_type = ext_gw_change_status['old_port_target_type']
+            old_p_t_type = ext_gw_change_status['old_hosting_port_name']
             if (ext_gw_change_status['old_trunk_nw_id'] is not None and
-                    port_target_type != old_p_t_type):
+                    trunk_port_name != old_p_t_type):
                 # Gateway network has been removed or has changed type
                 # (vlan -> vxlan or vice versa) so we must ensure that
                 # the the old trunk is removed.
@@ -839,48 +846,46 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
                 trunk_data[old_p_t_type]['network_id'] = (
                     ext_gw_change_status['old_trunk_nw_id'])
             if tr_info is not None:
-                trunk_data[port_target_type]['mappings'] = (
+                trunk_data[trunk_port_name]['mappings'] = (
                     {router['gw_port']['network_id']:
                         tr_info.segmentation_tag})
-                trunk_data[port_target_type]['port_id'] = (
+                trunk_data[trunk_port_name]['port_id'] = (
                     tr_info.hosting_port_id)
-                trunk_data[port_target_type]['network_id'] = (
+                trunk_data[trunk_port_name]['network_id'] = (
                     tr_info.hosting_port.network_id)
-                if port_target_type == cl3_const.T1_PORT_NAME:
+                if trunk_port_name == cl3_const.T1_PORT_NAME:
                     # The vxlan trunk must be updated separately
                     # since vlan trunk is updated during allocation.
-                    trunk_data[port_target_type]['update'] = True
+                    trunk_data[trunk_port_name]['update'] = True
         if (int_if_change_status.get('changed', False) and
             int_if_change_status.get('old_trunk_nw_id') is not None):
             # An internal network has been removed, and it may be the last
             # one, so we must ensure trunking of that network is cancelled.
-            old_p_t_type = int_if_change_status['old_port_target_type']
+            old_p_t_type = int_if_change_status['old_hosting_port_name']
             trunk_data[old_p_t_type]['update'] = True
             trunk_data[old_p_t_type]['port_id'] = (
                 int_if_change_status['old_hosting_port_id'])
             trunk_data[old_p_t_type]['network_id'] = (
                 int_if_change_status['old_trunk_nw_id'])
         for itfc in router.get(l3_constants.INTERFACE_KEY, []):
-            port_target_type = self._get_port_target_type(context,
+            trunk_port_name = self._get_hosting_port_name(context,
                                                           itfc['network_id'])
             tr_info, did_allocation = self._populate_trunk_for_port(
                 context, itfc, router['hosting_entity']['id'],
-                router['id'], port_target_type,
-                l3_db.DEVICE_OWNER_ROUTER_INTF,
-                hosting_pdata[port_target_type])
+                router['id'], trunk_port_name, hosting_pdata[trunk_port_name])
             if tr_info is not None:
-                trunk_data[port_target_type]['port_id'] = (
+                trunk_data[trunk_port_name]['port_id'] = (
                     tr_info.hosting_port_id)
-                trunk_data[port_target_type]['network_id'] = (
+                trunk_data[trunk_port_name]['network_id'] = (
                     tr_info.hosting_port.network_id)
-                if port_target_type == cl3_const.T1_PORT_NAME:
+                if trunk_port_name == cl3_const.T1_PORT_NAME:
                     # The vxlan trunk must be updated separately
                     # since vlan trunk is updated during allocation.
-                    trunk_data[port_target_type]['update'] = True
-            trunk_data[port_target_type]['update'] |= did_allocation
-            if (hosting_pdata[port_target_type]['mac'] is None and
+                    trunk_data[trunk_port_name]['update'] = True
+            trunk_data[trunk_port_name]['update'] |= did_allocation
+            if (hosting_pdata[trunk_port_name]['mac'] is None and
                     tr_info is not None):
-                hosting_pdata[port_target_type] = {
+                hosting_pdata[trunk_port_name] = {
                     'mac': itfc['trunk_info']['hosting_mac'],
                     'name': itfc['trunk_info']['hosting_port_name']}
         for td in trunk_data.values():
@@ -894,8 +899,7 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
                                                       td['mappings'])
 
     def _populate_trunk_for_port(self, context, port, hosting_entity_id,
-                                 router_id, trunk_port_name, device_owner,
-                                 hosting_pdata):
+                                 router_id, trunk_port_name, hosting_pdata):
         port_db = self._get_port(context, port['id'])
         tr_info = port_db.trunk_info
         new_allocation = False
@@ -904,7 +908,7 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
             # allocate one now
             tr_info = self._allocate_hosting_port(
                 context, port_db, hosting_entity_id, router_id,
-                trunk_port_name, device_owner)
+                trunk_port_name)
             if tr_info is None:
                 # This should not happen but just in case ...
                 LOG.error(_('Failed to allocate hosting port '
@@ -925,6 +929,73 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
                               'hosting_port_name': hosting_pdata.get('name'),
                               'segmentation_id': tr_info.segmentation_tag}
         return tr_info, new_allocation
+
+    def _allocate_hosting_port(self, context, port_db, hosting_entity_id,
+                               router_id, trunk_port_name):
+        net_type=self._get_network_type(trunk_port_name)
+        allocations = self._get_router_ports_with_trunkinfo_qry(
+            context, router_id).all()
+        trunk_mappings = {}
+        if len(allocations) == 0:
+            # Router has no ports with hosting port allocated to them yet
+            # whatsoever, so we select an unused port (that trunks networks
+            # of correct type) on the hosting entity.
+            id_allocated_port = self._get_unused_service_vm_trunk_port(
+                context, hosting_entity_id, trunk_port_name)
+        else:
+            # Router has at least one port with hosting port allocated to it.
+            # If there is only one allocated hosting port then it may be for
+            # the wrong network type. Iterate to determine the hosting port.
+            id_allocated_port = None
+            for item in allocations:
+                if item.trunk_info['network_type'] == net_type:
+                    # For VXLAN we need to determine used link local tags.
+                    # For VLAN we don't need to but the following lines will
+                    # be performed once anyway since we break out of the
+                    # loop later. That does not matter.
+                    tag = item.trunk_info['segmentation_tag']
+                    trunk_mappings[item['network_id']] = tag
+                    id_allocated_port = item.trunk_info['hosting_port_id']
+                else:
+                    port_twin_id = item.trunk_info['hosting_port_id']
+                if trunk_port_name == cl3_const.T2_PORT_NAME:
+                    # For a router port belonging to a VLAN network we can
+                    # break here since we now know (or have information to
+                    # determine) hosting_port and the VLAN tag is provided by
+                    # the core plugin.
+                    break
+            if id_allocated_port is None:
+                # Router only had hosting port for wrong network
+                # type allocated yet. So get that port's sibling.
+                id_allocated_port = self._get_other_port_id_in_pair(
+                    context, port_twin_id, hosting_entity_id)
+        if id_allocated_port is None:
+            # Database must have been messed up if this happens ...
+            return
+        if trunk_port_name == cl3_const.T1_PORT_NAME:
+            # For VLXAN we choose the (link local) VLAN tag
+            used_tags = set(trunk_mappings.values())
+            allocated_vlan = min(sorted(FULL_VLAN_SET - used_tags))
+        else:
+            # For VLAN core plugin provides VLAN tag.
+            trunk_mappings[port_db['network_id']] = None
+
+            tags = self.get_networks(context, {'id': port_db['network_id']},
+                                     [pr_net.SEGMENTATION_ID])
+            allocated_vlan = (None if tags == []
+                              else tags[0].get(pr_net.SEGMENTATION_ID))
+        if allocated_vlan is None:
+            # Database must have been messed up if this happens ...
+            return
+        with context.session.begin(subtransactions=True):
+            tr_info = TrunkInfo(
+                router_port_id=port_db['id'],
+                network_type=net_type,
+                hosting_port_id=id_allocated_port,
+                segmentation_tag=allocated_vlan)
+            context.session.add(tr_info)
+            context.session.expire(port_db)
+        return tr_info
 
     def _get_router_port_db_on_subnet(self, context, router_id, subnet):
         try:
@@ -1010,60 +1081,6 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
             context, router_id, device_owner, hosting_port_id)
         for port in query:
             mapping[port['network_id']] = port.trunk_info.segmentation_tag
-
-    def _allocate_hosting_port(self, context, port_db, hosting_entity_id,
-                               router_id, trunk_port_name, device_owner):
-        allocations = self._get_router_ports_with_trunkinfo_qry(
-            context, router_id).all()
-        trunk_mappings = {}
-        if len(allocations) == 0:
-            # Router has no hosting port allocated to it yet so we
-            # select an unused port on the hosting entity.
-            id_allocated_port = self._get_unused_service_vm_trunk_port(
-                context, hosting_entity_id, trunk_port_name)
-        else:
-            # Iterate over existing allocations to determine used vlan tags
-            id_allocated_port = None
-            for item in allocations:
-                if item['device_owner'] == device_owner:
-                    tag = item.trunk_info['segmentation_tag']
-                    trunk_mappings[item['network_id']] = tag
-                    id_allocated_port = item.trunk_info['hosting_port_id']
-                else:
-                    port_twin_id = item.trunk_info['hosting_port_id']
-                    if trunk_port_name == cl3_const.T2_PORT_NAME:
-                        # no need to iterate further since the plugin
-                        # provides the vlan tag for this case
-                        break
-            if id_allocated_port is None:
-                id_allocated_port = self._get_other_port_id_in_pair(
-                    context, port_twin_id, hosting_entity_id)
-        if id_allocated_port is None:
-            # Database must have been messed up if this happens ...
-            return
-        if trunk_port_name == cl3_const.T1_PORT_NAME:
-            used_tags = set(trunk_mappings.values())
-            allocated_vlan = min(sorted(FULL_VLAN_SET - used_tags))
-        else:
-            trunk_mappings[port_db['network_id']] = None
-            net_id = self.get_port(context, id_allocated_port,
-                                   ['network_id'])['network_id']
-            res = self._update_trunking_on_hosting_port(context,
-                                                        net_id,
-                                                        trunk_mappings)
-            allocated_vlan = (None if res is None
-                              else res.get(port_db['network_id']))
-        if allocated_vlan is None:
-            # Database must have been messed up if this happens ...
-            return
-        with context.session.begin(subtransactions=True):
-            tr_info = TrunkInfo(
-                router_port_id=port_db['id'],
-                hosting_port_id=id_allocated_port,
-                segmentation_tag=allocated_vlan)
-            context.session.add(tr_info)
-            context.session.expire(port_db)
-        return tr_info
 
     def _get_unused_service_vm_trunk_port(self, context, he_id, name):
         # mysql> SELECT * FROM ports WHERE device_id = 'he_id1' AND
