@@ -84,6 +84,10 @@ do
 done
 
 
+echo "Removing relevant quota limits ..."
+nova quota-update --cores -1 --instances -1 $tenantId
+
+
 echo -n "Checking if $csr1kvImageName image exists ..."
 hasImage=`glance image-show $csr1kvImageName 2>&1 | awk '/Property|No/ { if ($1 == "No") print "No"; else print "Yes"; }'`
 

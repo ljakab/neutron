@@ -172,6 +172,8 @@ class L3AgentCompositeScheduler(object):
             # Do the traditional Quantum router scheduling
             return self.schedule_namespace_router(plugin, context, sync_router)
         else:
+            if sync_router.get('hosting_entity') is None:
+                return
             # Schedule the hosting entity to a l3 cfg agent
             return self.schedule_hosting_entity_on_l3_cfg_agent(
                 plugin, context, sync_router['hosting_entity']['id'])
