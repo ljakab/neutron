@@ -8,6 +8,9 @@
 # --------------
 adminUser="quantum"
 adminRole="admin"
+# Below user is just for demos so that we don't see all logical instances.
+regularUser="viewer"
+password="viewer"
 l3AdminTenant="L3AdminTenant"
 
 
@@ -17,6 +20,16 @@ tenantId=`keystone tenant-get $l3AdminTenant 2>&1 | awk '/No tenant|id/ { if ($1
 if [ "$tenantId" == "No" ]; then
    echo " No, it does not. Creating it."
    tenantId=`keystone tenant-create --name $l3AdminTenant --description "Owner of CSR1kv VMs" | awk '/id/ { print $4; }'`
+else
+   echo " Yes, it does."
+fi
+
+
+echo -n "Checking if $regularUser user exists ..."
+userId=`keystone user-get $regularUser 2>&1 | awk '/No user|id/ { if ($1 == "No") print "No"; else print $4; }'`
+if [ "$userId" == "No" ]; then
+   echo " No, it does not. Creating it."
+   keystone user-create --name $regularUser --tenant $l3AdminTenant --pass $password --enabled true
 else
    echo " Yes, it does."
 fi

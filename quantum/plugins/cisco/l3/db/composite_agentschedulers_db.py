@@ -66,6 +66,25 @@ class CompositeAgentSchedulerDbMixin(agentsched_db.AgentSchedulerDbMixin):
         else:
             return []
 
+    def add_hosting_entity_to_l3_cfg_agent(self, context, agent_id,
+                                           hosting_entity_id):
+        #TODO(bobmel): Implement the adding to agent
+        pass
+
+    def remove_hosting_entity_from_l3_cfg_agent(self, context, agent_id,
+                                                hosting_entity_id):
+        #TODO(bobmel): Implement the removal from agent
+        pass
+
+    def list_hosting_entities_on_l3_cfg_agent(self, context, agent_id):
+        #TODO(bobmel): Change so it returns correct hosting entities
+        return {'hosting_entities': []}
+
+    def list_l3_cfg_agents_for_hosting_entity(self, context,
+                                              hosting_entity_id):
+        #TODO(bobmel): Change so it returns correct agent
+        return {'l3_cfg_agents': []}
+
     def get_l3_cfg_agents(self, context, active=None, filters=None):
         query = context.session.query(agents_db.Agent)
         query = query.filter(
