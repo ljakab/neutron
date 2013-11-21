@@ -11,10 +11,10 @@ n1kvNwProfileTypes=(vlan vlan)
 n1kvNwSubprofileTypes=(None None)
 n1kvNwProfileSegRange=(500-599 600-699)
 
-testNetworks=(bob_test_net1 bob_test_net2 bob_test_extnet1)
-testNetworkOpts=('' '' '--router:external=True')
-testSubnetNames=(bob_test_subnet1 bob_test_subnet2 bob_test_extsubnet1)
-testSubnetCIDRs=('10.0.10.0/24' '10.0.11.0/24' '10.0.20.0/24')
+testNetworks=(bob_test_net1 bob_test_net2 bob_test_net3 bob_test_net4 bob_test_net5 bob_test_net6 bob_test_extnet1)
+testNetworkOpts=('' '' '' '' '' '' '--router:external=True')
+testSubnetNames=(bob_test_subnet1 bob_test_subnet2 bob_test_subnet3 bob_test_subnet4 bob_test_subnet5 bob_test_subnet6 bob_test_extsubnet1)
+testSubnetCIDRs=('10.0.10.0/24' '10.0.11.0/24' '10.0.12.0/24' '10.0.13.0/24' '10.0.14.0/24' '10.0.15.0/24' '10.0.20.0/24')
 
 function get_network_profile_id() {
     index=$1
