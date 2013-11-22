@@ -33,6 +33,7 @@ LOG = logging.getLogger(__name__)
 
 class L3HostingEntityScheduler(object):
     """Methods to schedule routers to hosting entities."""
+    #TODO(bob-melander): Refactor to use driver per hosting entity type
 
     # This variable only count tenant unbound slots
     _avail_svc_vm_slots = -1
@@ -174,6 +175,8 @@ class L3HostingEntityScheduler(object):
             query = query.order_by(stmt.c.created_at, stmt.c.num_alloc)
         host_ents = query.all()
         if len(host_ents) == 0:
+            # Ensure pool counters are correct
+            self.sync_service_vm_pool_counters(context)
             return
         else:
             # Choose the hosting entity that has been running for the
