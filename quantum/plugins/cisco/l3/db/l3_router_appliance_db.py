@@ -115,7 +115,7 @@ FULL_VLAN_SET = set(range(MIN_LL_VLAN_TAG, MAX_LL_VLAN_TAG))
 
 # Port lookups can fail so retries are needed
 MAX_HOSTING_PORT_LOOKUP_ATTEMPTS = 10
-SECONDS_BETWEEN_HOSTING_PORT_LOOKSUPS = 7
+SECONDS_BETWEEN_HOSTING_PORT_LOOKSUPS = 2
 
 cfg.CONF.register_opts(router_appliance_opts)
 
@@ -1106,14 +1106,14 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
             query = query.order_by(models_v2.Port.name)
             res = query.first()
             if res is None:
-                if attempts > MAX_HOSTING_PORT_LOOKUP_ATTEMPTS:
+                if attempts >= MAX_HOSTING_PORT_LOOKUP_ATTEMPTS:
                     # This should not happen ...
                     LOG.error(_('Trunk port DB inconsistency for '
                                 'hosting entity %s'), he_id)
                     return
                 else:
                     # The service VM may not have plugged its VIF into the
-                    # Neutron Port yet so we wait and make another lookup
+                    # Neutron Port yet so we wait and make another lookup.
                     attempts += 1
                     LOG.info(_('Attempt %(attempt)d to find trunk ports for '
                                'hosting entity %(he_id)s failed. Trying '
