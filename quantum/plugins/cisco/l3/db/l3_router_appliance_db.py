@@ -1117,10 +1117,10 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
                     attempts += 1
                     LOG.info(_('Attempt %(attempt)d to find trunk ports for '
                                'hosting entity %(he_id)s failed. Trying '
-                               'again.'),  {'attempt': attempts,
-                                            'he_id': he_id})
+                               'again in %(time)d seconds.'),
+                             {'attempt': attempts, 'he_id': he_id,
+                              'time': SECONDS_BETWEEN_HOSTING_PORT_LOOKSUPS})
                     eventlet.sleep(SECONDS_BETWEEN_HOSTING_PORT_LOOKSUPS)
-                    LOG.info(_('Here we go. The new try.'))
             else:
                 break
         return res[0]
