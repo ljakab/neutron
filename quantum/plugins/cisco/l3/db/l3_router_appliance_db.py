@@ -18,6 +18,7 @@
 
 import string
 
+import eventlet
 from oslo.config import cfg
 import sqlalchemy as sa
 from sqlalchemy import and_
@@ -111,6 +112,10 @@ VLAN_SEGMENTATION = 'VLAN'
 MIN_LL_VLAN_TAG = 10
 MAX_LL_VLAN_TAG = 200
 FULL_VLAN_SET = set(range(MIN_LL_VLAN_TAG, MAX_LL_VLAN_TAG))
+
+# Port lookups can fail so retries are needed
+MAX_HOSTING_PORT_LOOKUP_ATTEMPTS = 10
+SECONDS_BETWEEN_HOSTING_PORT_LOOKSUPS = 2
 
 cfg.CONF.register_opts(router_appliance_opts)
 
@@ -1090,18 +1095,32 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
         # id NOT IN (SELECT hosting_port_id FROM trunkinfos) AND
         # name LIKE '%t1%'
         # ORDER BY name;
+        attempts = 0
         stmt = context.session.query(TrunkInfo.hosting_port_id).subquery()
         query = context.session.query(models_v2.Port.id)
         query = query.filter(and_(models_v2.Port.device_id == he_id,
                                   ~models_v2.Port.id.in_(stmt),
                                   models_v2.Port.name.like('%' + name + '%')))
         query = query.order_by(models_v2.Port.name)
-        res = query.first()
-        if res is None:
-            # This should not happen ...
-            LOG.error(_('Trunk port DB inconsistency for hosting entity %s'),
-                      he_id)
-            return
+        while True:
+            res = query.first()
+            if res is None:
+                if attempts > MAX_HOSTING_PORT_LOOKUP_ATTEMPTS:
+                    # This should not happen ...
+                    LOG.error(_('Trunk port DB inconsistency for hosting entity %s'),
+                              he_id)
+                    return
+                else:
+                    # The service VM may not have plugged its VIF into the
+                    # Neutron Port yet so we wait and make another lookup
+                    attempts += 1
+                    LOG.info(_('Attempt %{attempt}d to find trunk ports for '
+                               'hosting entity %{he_id}s failed. Trying again.'),
+                             {'attempt': attempts, 'he_id': he_id})
+                    eventlet.sleep(SECONDS_BETWEEN_HOSTING_PORT_LOOKSUPS)
+                    LOG.info(_('Here we go. The new try.'))
+            else:
+                break
         return res[0]
 
     def _get_other_port_id_in_pair(self, context, port_id, hosting_entity_id):
