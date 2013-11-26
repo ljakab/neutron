@@ -115,7 +115,7 @@ FULL_VLAN_SET = set(range(MIN_LL_VLAN_TAG, MAX_LL_VLAN_TAG))
 
 # Port lookups can fail so retries are needed
 MAX_HOSTING_PORT_LOOKUP_ATTEMPTS = 10
-SECONDS_BETWEEN_HOSTING_PORT_LOOKSUPS = 2
+SECONDS_BETWEEN_HOSTING_PORT_LOOKSUPS = 7
 
 cfg.CONF.register_opts(router_appliance_opts)
 
@@ -1119,10 +1119,8 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
                                'hosting entity %(he_id)s failed. Trying '
                                'again.'),  {'attempt': attempts,
                                             'he_id': he_id})
-                    print "FAILURE NUMBER:", attempts, "NOW SLEEP"
                     eventlet.sleep(SECONDS_BETWEEN_HOSTING_PORT_LOOKSUPS)
                     LOG.info(_('Here we go. The new try.'))
-                    print "AWAKE. NEW TRY"
             else:
                 break
         return res[0]
