@@ -1096,27 +1096,29 @@ class L3_router_appliance_db_mixin(extraroute_db.ExtraRoute_db_mixin):
         # name LIKE '%t1%'
         # ORDER BY name;
         attempts = 0
-        stmt = context.session.query(TrunkInfo.hosting_port_id).subquery()
-        query = context.session.query(models_v2.Port.id)
-        query = query.filter(and_(models_v2.Port.device_id == he_id,
-                                  ~models_v2.Port.id.in_(stmt),
-                                  models_v2.Port.name.like('%' + name + '%')))
-        query = query.order_by(models_v2.Port.name)
         while True:
+            stmt = context.session.query(TrunkInfo.hosting_port_id).subquery()
+            query = context.session.query(models_v2.Port.id)
+            query = query.filter(and_(models_v2.Port.device_id == he_id,
+                                      ~models_v2.Port.id.in_(stmt),
+                                      models_v2.Port.name.like('%' + name +
+                                                               '%')))
+            query = query.order_by(models_v2.Port.name)
             res = query.first()
             if res is None:
                 if attempts > MAX_HOSTING_PORT_LOOKUP_ATTEMPTS:
                     # This should not happen ...
-                    LOG.error(_('Trunk port DB inconsistency for hosting entity %s'),
-                              he_id)
+                    LOG.error(_('Trunk port DB inconsistency for '
+                                'hosting entity %s'), he_id)
                     return
                 else:
                     # The service VM may not have plugged its VIF into the
                     # Neutron Port yet so we wait and make another lookup
                     attempts += 1
                     LOG.info(_('Attempt %(attempt)d to find trunk ports for '
-                               'hosting entity %(he_id)s failed. Trying again.'),
-                             {'attempt': attempts, 'he_id': he_id})
+                               'hosting entity %(he_id)s failed. Trying '
+                               'again.'),  {'attempt': attempts,
+                                            'he_id': he_id})
                     print "FAILURE NUMBER:", attempts, "NOW SLEEP"
                     eventlet.sleep(SECONDS_BETWEEN_HOSTING_PORT_LOOKSUPS)
                     LOG.info(_('Here we go. The new try.'))
