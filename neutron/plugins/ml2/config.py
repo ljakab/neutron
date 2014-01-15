@@ -18,7 +18,7 @@ from oslo.config import cfg
 
 ml2_opts = [
     cfg.ListOpt('type_drivers',
-                default=['local', 'flat', 'vlan', 'gre', 'vxlan'],
+                default=['local', 'flat', 'vlan', 'gre', 'vxlan', 'lisp'],
                 help=_("List of network type driver entrypoints to be loaded "
                        "from the neutron.ml2.type_drivers namespace.")),
     cfg.ListOpt('tenant_network_types',
